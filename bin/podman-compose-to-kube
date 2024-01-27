@@ -2,19 +2,19 @@
 
 format() {
   echo "$0
-  [--type(-t) <deployment type>]\
+  [--type(-t) <deployment type>]
   [--namespace(-n) <namespace>]
-  [--dir(-d) <manifests_directory>]\
-  [--pvpath <PersistentVolume_directory>] \
-  [--user(-u) <rootless_user>]\
-  [--group(-g) <rootless_group>]\
-  [--debug(-d) <debugLevel>]\
-  <POD_name>\
+  [--dir(-d) <manifests_directory>]
+  [--pvpath <PersistentVolume_directory>]
+  [--user(-u) <rootless_user>]
+  [--group(-g) <rootless_group>]
+  [--debug(-d) <debugLevel>]
+  <POD_name>
   <docker-compose_file_name>
   " >&2
 }
 
-headerComment="# Created with podman-compose-to-kube 1.0.6-alt1"
+headerComment="# Created with podman-compose-to-kube 1.0.0-alt1"
 
 # Flag Analysis
 if ! args=$(/usr/bin/getopt -n $0 \
