@@ -1,0 +1,334 @@
+#!/bin/sh
+
+format() {
+  echo "$0
+  [--type(-t) <deployment type>]\
+  [--namespace(-n) <namespace>]
+  [--dir(-d) <manifests_directory>]\
+  [--pvpath <PersistentVolume_directory>] \
+  [--user(-u) <rootless_user>]\
+  [--group(-g) <rootless_group>]\
+  [--debug(-d) <debugLevel>]\
+  <POD_name>\
+  <docker-compose_file_name>
+  " >&2
+}
+
+headerComment="# Created with podman-compose-to-kube 1.0.6-alt1"
+
+# Flag Analysis
+if ! args=$(/usr/bin/getopt -n $0 \
+  -o t:n:d:u:g: \
+  --long type: \
+  --long namespace: \
+  --long dir: \
+  --long pvpath: \
+  --long debug: \
+  --long user:\
+  --long group: \
+  -- $@
+  )
+then
+  format;
+  exit $?
+fi
+
+set -- $args
+debugLevel=0
+while [ "$1" != '--' ]
+do
+  case $1 in
+    '--type'|'-t') type=${2:1:-1};;
+    '--namespace' | '-n') namespace=${2:1:-1};;
+    '--dir'|'-d') dir=${2:1:-1};;
+    '--pvpath') pvpath=${2:1:-1};;
+    '--user'|'-u') user=${2:1:-1};;
+    '--group'|'-u') group=${2:1:-1};;
+    '--debug') debugLevel=${2:1:-1};;
+  esac
+  shift; shift
+done
+if [ -n "$debugLevel" ]
+then
+  if [ "$debugLevel" -ge 0 ] 2>/dev/null; then :;
+  else
+    echo "Incorrect debug level: $debugLevel" >&2
+    exit 1
+  fi
+else
+  debugLevel=0
+fi
+shift
+if [ $# -ne 2 ]
+then
+  echo "Invalid number of parameters" >&2
+  format
+  exit 1;
+fi
+podName=${1:1:-1} composeFile=${2:1:-1}
+if [ "${podName:0:3}" == 'pod' ]
+then
+  kubeName=${podName:3}
+  if [ "${kubeName:0:1}" == '-' -o "${kubeName:0:1}" == '_' ]
+  then
+    kubeName=${kubeName:1}
+  fi
+fi
+
+if [ -z "$type" ]; then type='pod'; fi
+if [ -z "$namespace" ]; then namespace="default"; fi
+if [ -z "$dir" ]; then dir='manifests'; fi
+if [ -z "$user" ]; then user=''; fi
+if [ -z "$group" ]; then group=$user; fi
+if [ -z "$pvpath" ]; then pvpath="/mnt/PersistentVolumes"; fi
+
+case $type in
+  'p'|'pod') type='Pod';;
+  'd'|'deployment') type='Deployment';;
+  *) echo "Unknown type. Valid values: p, pod, r, replica, d, deployment" >&2;
+    exit 1;
+esac
+
+if [ ! -f $composeFile ]
+then
+  echo "File $composeFile missing" >&2
+  exit 1
+fi
+tmpFile=$(mktemp)
+podFile=$(mktemp)
+
+namespaceDir="$dir/$namespace"
+kubeDir="$namespaceDir/$kubeName"
+deployDir="$kubeDir/$type"
+serviceDir="$deployDir/Service"
+volumeDir="$deployDir/PersistentVolumeClaim"
+pvDir="$deployDir/PersistentVolume"
+mkdir -p $dir $volumeDir $pvDir $deployDir $serviceDir
+
+if [ $debugLevel -gt 0 ]
+then
+  echo "Generate a POD manifest based on the specified POD" >&2
+fi
+if ! podman kube generate --service $podName  > $tmpFile
+then
+  echo "POD with name $podName is missing" >&2
+  rm -f $tmpFile
+  exit 1
+fi
+
+if [ $debugLevel -gt 0 ]
+then
+  echo "Generate a list of scalar yml elements ending with name(Name)" >&2
+fi
+listNamesPath=$(
+cat $tmpFile |
+yq -r '. |
+select(.kind=="Pod") |
+path(..| select(scalars)) |
+select((tostring) | (match("name\"]$";"i"))) |
+map(if type == "number" then "["+tostring+"]" else . end) |
+join(".")'
+)
+
+if [ $debugLevel -gt 0 ]
+then
+  echo "Generate a jq request to replace symbols _ with symbols - in selected elements" >&2
+fi
+q="select(.kind==\"Pod\")|
+  .metadata.name=\"$kubeName\"|
+  .metadata.labels.app=\"$kubeName\"
+"
+sep='|'
+for namePath in $listNamesPath
+do
+  q+="$sep .$namePath = (.$namePath | split(\"_\") | join(\"-\") | ascii_downcase)"
+done
+if [ $debugLevel -gt 0 ]
+then
+  echo "Generate list of services in docker-compose file"  >&2
+fi
+services=$(cat $composeFile | yq '.services|keys')
+for service in $(echo $services | yq -r .[])
+do
+  # Is there a description of the environment variables in the service?
+  if [ "$(yq '.services.'$service'.environment' < $composeFile)" != 'null' ]
+  then
+    if [ $debugLevel -gt 0 ]
+    then
+      echo -ne "Add descriptions of the environment variables to the container $service\n" >&2
+    fi
+    env=$(yq '[
+      .services.'$service'.environment |
+            to_entries[] |
+      {"name":.key, "value":.value|tostring}]' < $composeFile
+    )
+    q+="| .spec.containers|= map(if .name|test(\".*$service.*\\\\d*$\") then .env=$env else . end)"
+  fi
+done
+
+yq -y "$q" < $tmpFile > $podFile
+
+if [ $debugLevel -gt 0 ]
+then
+  echo "Removing the deployment directory $deployDir" >&2
+  echo "Generate common POD YML file" >&2
+fi
+rm -rf $deployDir
+mkdir -p $dir $volumeDir $pvDir $deployDir $serviceDir
+
+if [ "$(yq -r 'select(.kind=="Pod") | .spec.volumes' < $tmpFile)" != 'null' ]
+then
+  if [ $debugLevel -gt 0 ]
+  then
+    echo "Generate PersistentVolumeClaims and PersistentVolumes:" >&2
+  fi
+  PV='{"apiVersion": "v1","kind": "PersistentVolume",
+    "metadata": {"name": "task-pv-volume","labels": {"type": "local"}},
+    "spec": {
+      "storageClassName": "manual",
+      "claimRef": {},
+      "capacity": {"storage": "1Gi"},
+      "accessModes": ["ReadWriteOnce"],
+      "hostPath": {"path": \"$pvpath\"}
+    }
+  }'
+  volumeNames=$(yq -r 'select(.kind=="Pod") | .spec.volumes.[].persistentVolumeClaim.claimName' < $tmpFile)
+  for volumeName in $volumeNames
+  do
+    volumeName=$(echo $volumeName | tr '_' '-')
+    volumeFile="$volumeDir/$volumeName.yml"
+    echo "$headerComment" > $volumeFile
+    podman kube generate $volumeName |
+    yq -y '.metadata.name=(.metadata.name|
+      split("_")|
+      join("-"))|
+      .metadata.namespace="'$namespace'"|
+      .spec.storageClassName="manual"
+      ' >> $volumeFile
+    pvsize=$(yq -r '.spec.resources.requests.storage' < $volumeFile)
+    pvFile="$pvDir/$volumeName.yml"
+    pvname="$namespace-$volumeName"
+    pvPath="$pvpath/$namespace/$volumeName"
+    pvFile="$pvDir/$pvname.yml"
+    if [ $debugLevel -gt 0 ]
+    then
+      echo -ne "\t$volumeFile\n"  >&2
+      echo -ne "\t$pvFile\n"  >&2
+      echo -ne "\t$pvPath\n"  >&2
+    fi
+    mkdir -p $pvPath
+    if [ -n "$user" ]
+    then
+      chown $user:$group $pvPath
+    fi
+    echo "$headerComment" > $pvFile
+    echo $PV |
+    yq -y "
+      .metadata.name=\"$pvname\" |
+      .spec.capacity.storage=\"$pvsize\" |
+      .spec.hostPath.path=\"$pvPath\" |
+      .spec.claimRef={\"name\":\"$volumeName\",\"namespace\":\"$namespace\"}
+      " >> $pvFile
+  done
+fi
+
+if [ $type == 'Pod' ]
+then
+  deployFile="$deployDir/$kubeName.yml"
+  if [ $debugLevel -gt 0 ]
+  then
+    echo "Generate a deploy file $deployFile of the Pod type:" >&2
+  fi
+  echo "$headerComment" > $deployFile
+  yq -y ".metadata.namespace=\"$namespace\" |
+   .spec.hostAliases=[{\"ip\":\"127.0.0.1\",\"hostnames\":$services}]
+  " < $podFile >> $deployFile
+  serviceFile=$serviceDir/$kubeName.yml
+  if [ $debugLevel -gt 0 ]
+  then
+    echo "Generate a service file $serviceFile of the Pod type" >&2
+  fi
+  echo "$headerComment" > $serviceFile
+  yq -y "
+    select(.kind==\"Service\")|
+    .metadata.name=\"$kubeName\"|
+    .metadata.labels.app=\"$kubeName\"|
+    .metadata.namespace=\"$namespace\"|
+    .spec.selector.app=\"$kubeName\"
+  " < $tmpFile >> $serviceFile
+else
+  if [ $type == 'Deployment' ]
+  then
+    if [ $debugLevel -gt 0 ]
+    then
+      echo "Generate a deploy files of the Deployment type:"  >&2
+    fi
+    for service in $(echo $services | yq -r .[])
+    do
+      if [ $debugLevel -gt 0 ]
+      then
+        echo -ne "\t$service\n" >&2
+      fi
+      deploy='{"apiVersion": "apps/v1","kind": "Deployment",
+        "metadata": {"name": "'$service'","labels": {"app": "'$service'"},"namespace": "'$namespace'"},
+        "spec": {
+          "replicas": 1,
+          "selector": {"matchLabels": {"app": "'$service'"}},
+          "template": {"metadata": {"labels": {"app": "'$service'"}},"spec": {"containers": [.]}}
+        }
+      }'
+      volume=
+      if [ "$(yq -r '.spec.volumes' < $podFile)" != 'null' ]
+      then
+        volumeMatch="[.spec.volumes[]|select(.name|match(\".*$service.*\"))]"
+        volume=$(yq "$volumeMatch" < $podFile)
+      fi
+      # Is there a list of volumes in the service?
+      if [ -n "$volume" -a "$volume" != "[]" ]
+      then
+        if [ $debugLevel -gt 0 ]
+        then
+          echo -ne "\t\tAdd volume descriptions to the container\n" >&2
+        fi
+      deploy+="|.spec.template.spec.volumes=$volume"
+      fi
+      deployFile="$deployDir/$service.yml"
+      if [ $debugLevel -gt 0 ]
+      then
+        echo -ne "\t\tGenerate a deploy  file $deployFile\n" >&2
+      fi
+      echo "$headerComment" > $deployFile
+      yq -y "
+        .spec.containers[]|
+        select(.name|match(\".*$service.*\"))|
+        $deploy
+        " < $podFile >> $deployFile
+      if [ "$(yq '.services.'$service'.ports' < $composeFile)" != 'null' ]
+      then
+        if [ $debugLevel -gt 0 ]
+        then
+          echo -ne "\t\tAdd descriptions of the ports to the service\n" >&2
+        fi
+        # Create a request to create a description of services
+        ports=$(yq -r '[.services.'$service'.ports[]|tostring|split(":")[-1]]|map(".port=="+.)|join(" or ")' < $composeFile)
+        serviceFile="$serviceDir/$service.yml"
+        if [ $debugLevel -gt 0 ]
+        then
+          echo -ne "\t\tGenerate a service file $serviceFile\n" >&2
+        fi
+        serviceFile="$serviceDir/$service.yml"
+        echo "$headerComment" > $serviceFile
+        yq -y "
+           select(.kind==\"Service\")|
+          .spec.ports=[.spec.ports[]|select($ports)] |
+          .metadata.name=\"$service\"|
+          .metadata.labels.app=\"$service\"|
+          .metadata.namespace=\"$namespace\"|
+          .spec.selector.app=\"$service\"
+        " < $tmpFile >> $serviceFile
+      fi
+    done
+  fi
+fi
+
+rm -f $tmpFile $podFile

@@ -1,0 +1,309 @@
+.\" generated with Ronn/v0.7.3
+.\" http://github.com/rtomayko/ronn/tree/0.7.3
+.
+.TH "PODMAN\-COMPOSE\-TO\-KUBE" "1" "January 2024" "" ""
+.
+.SH "NAME"
+\fBpodman\-compose\-to\-kube\fR \- generate kubernetes manifests based on the running podman\-compose POD
+.
+.SH "SYNOPSIS"
+.
+.nf
+
+
+podman\-compose\-to\-kube\e
+   [\-\-type(\-t) <deployment type>]\e
+   [\-\-namespace(\-n) <namespace>]
+   [\-\-dir(\-d) <manifests_directory>]\e
+   [\-\-pvpath <PersistentVolume_directory>] \e
+   [\-\-user <rootless_user>]\e
+   [\-\-group <rootless_group>]\e
+   [\-\-debug <debug_level>]\e
+   <POD_name>\e
+   <docker\-compose_file_name>
+.
+.fi
+.
+.SH "DESCRIPTION"
+The script provides the migration of docker\-compose solutions to kubernetes\.
+.
+.P
+Before calling the script, you need to use the podman\-compose command to start the service stack in POD and check its functionality \.
+.
+.P
+The script podman\-compose\-to\-kube generates \fBkubernetes manifests\fR to deploy the specified service stack in kubernetes\. The \fBPOD\fR created by the podman\-compose command is used as the basis for generation\.
+.
+.P
+Manifests are generated in the directory specified by the \fB\-\-dir\fR (\fB\-d\fR) option (the default is the \fBmanifests\fR directory)\. The manifest directory has the following structure:
+.
+.IP "" 4
+.
+.nf
+
+
+manifests/
+├── <namespace1>
+│   ├── <pod1Name>
+│   │   ├── Deployment
+│   │   │   ├── <service1Name>\.yml
+│   │   │   ├── <service2Name>\.yml
+│   │   │   ├── PersistentVolume
+│   │   │   │   └── <namespace1>\-<pod1Name>\-<service1Name>\.yml
+│   │   │   ├── PersistentVolumeClaim
+│   │   │   │   └── <pod1Name>\-<service1Name>\.yml
+│   │   │   └── Service
+│   │   │       ├── <service1Name>\.yml
+│   │   │       └── <service2Name>\.yml
+│   │   └── Pod
+│   │       ├── <pod1Name>\.yml
+│   │       ├── PersistentVolume
+│   │       │   └── <namespace1>\-<pod1Name>\-<service1Name>\.yml
+│   │       ├── PersistentVolumeClaim
+│   │       │   └── <pod1Name>\-<service1Name>\.yml
+│   │       └── Service
+│   │           └── <pod1Name>\.yml
+│   └── <pod2Name>
+│       ├── Deployment
+│       │   ├── \.\.\.
+│       └── Pod
+│           ├── \.\.\.
+└── <namespace2>
+    └── <pod3Name>
+        └── \.\.\.
+.
+.fi
+.
+.IP "" 0
+.
+.P
+The manifests directory (default \fBmanifests\fR) contains \fBnamespaces\fR subdirectories\.
+.
+.P
+Within the \fBnamespace\fR directory, for each generated set of manifests, a subdirectory is created for each \fBPod\fR\. The directory name is formed from the \fBPod\fR name by removing the \fBpod\fR prefix\.
+.
+.P
+In the \fBPod\fR directory, for each deployment type (\fBPod\fR, \fBDeployment\fR), a subdirectory is created containing YML manifest files:
+.
+.IP "\(bu" 4
+manifest files \fB*\.yml\fR \- container deployment files (\fBkind: Pod\fR, \fBkind: Deployment\fR);
+.
+.IP "\(bu" 4
+\fBService\fR directory with YML files describing services (\fBkind: Service\fR);
+.
+.IP "\(bu" 4
+the \fBPersistentVolumeClaim\fR directory with YML files describing requests for external volumes (\fBkind: PersistentVolumeClaim\fR);
+.
+.IP "\(bu" 4
+\fBPersistentVolume\fR directory with YML files describing external local volumes (\fBkind: PersistentVolume\fR)\.
+.
+.IP "" 0
+.
+.P
+Files in the \fBPersistentVolume\fR directory descrbe external local volumes\. They have links to the corresponding YML files \- descriptions of requests for external volumes in the \fBPersistentVolumeClaim\fR directory\.
+.
+.P
+This format for placing YML manifest files allows you to deploy a kubernetes solution with one command:
+.
+.IP "" 4
+.
+.nf
+
+
+kubectl apply \-R \-f manifests/<namespace1>/<podName>/Pod
+.
+.fi
+.
+.IP "" 0
+.
+.P
+for POD deployment or
+.
+.IP "" 4
+.
+.nf
+
+
+kubectl apply \-R \-f manifests/<namespace1>/<podName>/Deployment
+.
+.fi
+.
+.IP "" 0
+.
+.P
+for Deployment deployment\.
+.
+.br
+.
+.br
+And also remove the kubernet solution:
+.
+.IP "" 4
+.
+.nf
+
+
+kubectl delete \-R \-f manifests/<namespace1>/<podName>/Pod
+.
+.fi
+.
+.IP "" 0
+.
+.P
+for POD deployment or
+.
+.IP "" 4
+.
+.nf
+
+
+kubectl delete \-R \-f manifests/<namespace1>/<podName>/Deployment
+.
+.fi
+.
+.IP "" 0
+.
+.P
+for Deployment deployment\.
+.
+.SS "POD Deployment Type"
+\fBDeploy file of type Pod (kind: Pod)\fR
+.
+.P
+With deployment type \fBPOD\fR (\fB\-\-type pod\fR or \fB\-t p\fR) in the directory \fBmanifests/<namespace>/<podName>/Pod/\fR a deployment YML file (\fBkind: Pod\fR) \fB<pod1Name>\.yml\fR is generated\.
+.
+.P
+All \fBdocker\-compose service\fR containers run within the one pod\. Network interaction between containers of the same service stack is carried out through the localhost interface (127\.0\.0\.1)\. In this regard, a description is added to the YML file:
+.
+.IP "" 4
+.
+.nf
+
+
+   hostAliases:
+     \- ip: 127\.0\.0\.1
+       hostnames:
+         \- <service_name1>
+         \- <service_name2>
+         \- \.\.\.
+.
+.fi
+.
+.IP "" 0
+.
+.P
+This provides the ability to access service ports by service name\.
+.
+.P
+\fBService description file (kind: Service)\fR
+.
+.P
+The service description file \fB<podName>\.yml\fR is generated in the \fBmanifests/<namespace>/<podName>/Pod/Service/\fR directory\. All docker service ports are placed into one service named \fB<podName>\fR in the namespace \fB<namespace>\fR\. This provides access to `Pod\' ports by domain names within the kubernetes cluster:
+.
+.IP "" 4
+.
+.nf
+
+
+<podName> (within namespace `<namespace>`)
+<podName>\.<namespace>
+<podName>\.<namespace>\.svc\.cluster\.local
+.
+.fi
+.
+.IP "" 0
+.
+.P
+\fBExternal volume request description files (kind: PersistentVolumeClaim)\fR
+.
+.P
+External volume request description files with names \fB<podName>\-<serviceName>\fR are located in the directory \fBmanifests/<namespace>/<podName>/Pod/PersistentVolumeClaim/\fR\. Each volume is named \fB<podName>\-<serviceName>\fR\. Amount of allocated disk memory: \fB1Gi\fR\. If necessary, after generating the YML files, this parameter can be changed\.
+.
+.P
+\fBLocal volume description files (kind: PersistentVolume)\fR
+.
+.P
+For each request for an external volume, a local volume description file named \fB<namespace>\-<podName>\-<serviceName>\.yml\fR is generated in the \fBmanifests/<namespace>/<podName>/Pod/PersistentVolume/\fR directory\. Each described volume has the same size (\fB1Gi\fR) as the claim for the outer volume and is associated with it through a handle:
+.
+.IP "" 4
+.
+.nf
+
+
+   claimRef:
+     name: <podName>\-<serviceName>
+     namespace: &ltnamespace>
+.
+.fi
+.
+.IP "" 0
+.
+.P
+The subdirectories of the created volumes are located in the \fB<namespace>\fR directory of the directory specified by the \fB\-\-pvpath\fR option (default \fB/mnt/PersistentVolumes\fR)\. Subdirectory name: \fB<podName>\-<serviceName>\fR\.
+.
+.P
+If volumes are created for a \fBkubernetes\fR node running in \fBrootless mode\fR, you must specify the name and group in the \fB\-\-user(\-u)\fR, \fB\-\-group\fR(\-g)` parameters (if there is no flag, the same as username) on behalf of which the containers of the cluster node operate\.
+.
+.SS "Deployment type"
+\fBDeploy files of type Deployment (kind: Deployment)\fR
+.
+.P
+When the deployment type is \fBDeployment\fR (\fB\-\-type deployment\fR or \fB\-t d\fR) in the \fBmanifests/<namespace>/<podName>/Deployment/\fR directory, for each docker\-compose service a deployment YML file (\fBkind: Deployment\fR) \fBservuceName>\.yml\fR is created\.
+.
+.P
+The number of service replicas (\fBspec\.replicas\fR) is set to 1\.
+.
+.P
+If necessary, after generating YML files for \fBStateless containers\fR (without external volumes or with read\-only volumes), the number of replicas can be increased to the required value\.
+.
+.P
+\fBService description files (kind: Service)\fR
+.
+.P
+Service description files \fB<serviceName>\.yml\fR are generated in the \fBmanifests/<namespace>/<podName>/Deployment/Service/\fR directory\.
+.
+.P
+It should be noted that if the \fBdocker\-compose service\fR accepts requests on any port from other services in the service stack, before starting the \fBPod\fR with the \fBpodman\-compose\fR command it is necessary to \fBbe sure to specify this port in the descriptor\fR \fBservices\.<service>\.port\fR \fBdocker\-compose file\fR\. Otherwise, the service description file \fBmanifests/<namespace>/<podName>/Deployment/Service/<serviceName>\.yml\fR will not be created and the container ports will not be visible under the short domain name \fB<serviceName>\fR by other containers of this deployment ( \fBDeployment\fR)\.
+.
+.P
+\fBExternal Volume Claim Files (kind: PersistentVolumeClaim) and Local Volume Claim Files (kind: PersistentVolume)\fR
+.
+.P
+These files are generated in exactly the same way\. as for \fBPod\fR type deployment\. Moreover, files created by a \fBPod\fR deployment can be used by a \fBDeployment\fR deployment\. And vice versa\. But you should not use these volumes simultaneously for both deployments\.
+.
+.SH "OPTIONS"
+Team flags:
+.
+.IP "\(bu" 4
+\fB\-\-type\fR (\fB\-t\fR) \- deployment type: \fBpod\fR (\fBp\fR), \fBdeployment\fR (\fBd\fR)\. The default value is \fBpod\fR\.
+.
+.IP "\(bu" 4
+\fB\-\-namespace\fR (\fB\-n\fR) \- kubernetes namespace\. The default value is \fBdefault\fR\.
+.
+.IP "\(bu" 4
+\fB\-\-dir\fR (\fB\-d\fR) \- directory for generated manifests\. The default value is \fBmanifests\fR\.
+.
+.IP "\(bu" 4
+\fB\-pvpath\fR \- directory for mounting PersistentVolume volumes\. The default value is \fB/mnt/PersistentVolumes/\fR\.
+.
+.IP "\(bu" 4
+\fB\-\-user\fR (\fB\-u\fR) the name of the rootless user from which kubernetes runs\. The default value is the empty string\.
+.
+.IP "\(bu" 4
+\fB\-\-group\fR (\fB\-g\fR) \- group of the rootless user from which kubernetes runs\. The default value is \fB=user\fR\.
+.
+.IP "\(bu" 4
+\fB\-\-debug\fR \- debug level\. The default value is \fB0\fR\.
+.
+.IP "" 0
+.
+.P
+Positional parameters:
+.
+.IP "1." 4
+POD_name \- the name of the \fBPOD\fR;
+.
+.IP "2." 4
+docker\-compose\-filename \- the name of the docker\-compose file from which \fBPOD\fR is deployed
+.
+.IP "" 0
+
