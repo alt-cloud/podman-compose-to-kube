@@ -349,7 +349,7 @@ def gen_deploy_file(pod_file: dict, service: str) -> None:
         if service in volume:
             if args.verbose:
                 print("\t\tAdd volume descriptions to the container")
-            deploy["spec"]["template"]["spec"]["volumes"] = v
+            deploy["spec"]["template"]["spec"]["volumes"] = [v]
         if args.verbose:
             print(f"\t\tGenerate a deploy file {deploy_file_path}")
         write_yaml_to_file(deploy, deploy_file_path)
