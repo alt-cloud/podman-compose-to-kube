@@ -130,7 +130,8 @@ def generate_a_k8s_service_file(pod_name: str) -> str:
             rez += l
         return rez
     except:
-        return ""
+        print(f'Service "{pod_name}" does not exists')
+        raise
 
 def parse_yaml(yaml_file: str) -> dict:
     rez = dict()
@@ -159,8 +160,9 @@ def read_file(path: str) -> str:
     try:
         with open(path) as f:
             return f.read()
-    except:
-        return ""
+    except FileNotFoundError:
+        print(f'File "{path}" not found')
+        raise
 
 def get_services_names(yaml_section: dict) -> list:
     rez = []
@@ -191,7 +193,8 @@ def podman_kube_generate(volume_name: str) -> str:
             rez += l
         return rez
     except:
-        return ""
+        print(f'Volume "{volume_name}" does not exists')
+        raise
 
 def write_yaml_to_file(yaml_section: dict, file_path: str) -> None:
     if args.output == 'yml':
