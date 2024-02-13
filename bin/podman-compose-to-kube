@@ -109,6 +109,7 @@ kube_dir = f"{namespace_dir}/{kube_name}"
 deploy_dir = f"{kube_dir}/{args.type.capitalize()}"
 service_dir = f"{deploy_dir}/Service"
 volume_dir = f"{deploy_dir}/PersistentVolumeClaim"
+persistent_volume_dir = f"{deploy_dir}/PersistentVolume"
 
 def mkdirs(dirs: list[str]) -> None:
     for d in dirs:
@@ -287,7 +288,7 @@ def gen_pvs(service_file: dict) -> None:
                 write_yaml_to_file(volume[v], volume_file_path)
                 pv_size = volume[v]["spec"]["resources"]["requests"]["storage"]
                 pv_name = f"{args.namespace}-{vn}"
-                pv_file = f"{args.pvpath}/{pv_name}.{args.output}"
+                pv_file = f"{persistent_volume_dir}/{pv_name}.{args.output}"
                 pv_path = f"{args.pvpath}/{args.namespace}/{vn}"
                 if args.verbose:
                     print(f"\t{volume_file_path}")
@@ -361,6 +362,7 @@ def main() -> None:
         deploy_dir,
         service_dir,
         args.pvpath,
+        persistent_volume_dir,
         volume_dir,
     ]
     mkdirs(dirs)
