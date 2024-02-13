@@ -387,7 +387,7 @@ def main() -> None:
         for s in services:
             environment = get_environment_from_service(compose[k], s)
     if args.verbose:
-        print("Generate common POD YML file")
+        print("Generate common POD file")
     for i in k8s_service_file.keys():
         if k8s_service_file[i]["kind"] == "Pod":
             pod_file = set_environment(k8s_service_file[i], environment)
