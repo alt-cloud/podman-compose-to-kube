@@ -240,7 +240,7 @@ def get_deploy_file(name: str, containers: dict) -> dict:
             "selector": {"matchLabels": {"app": name}},
             "template": {
                 "metadata": {"labels": {"app": name}},
-                "spec": {"containers": containers},
+                "spec": {"containers": [containers]},
             },
         },
     }
