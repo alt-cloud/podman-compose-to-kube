@@ -204,7 +204,7 @@ def write_yaml_to_file(yaml_section: dict, file_path: str) -> None:
         file_info += "---\n"
         file_info += yaml.dump(yaml_section, default_flow_style=False, default_style='')
     elif args.output == 'json':
-        file_info += json.dumps(yaml_section, indent=2)
+        file_info = json.dumps(yaml_section, indent=2)
     with open(file_path, "w") as f:
         f.write(file_info)
 
