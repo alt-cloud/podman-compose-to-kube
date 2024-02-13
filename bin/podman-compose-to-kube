@@ -87,7 +87,7 @@ def set_type():
     if args.type == "p":
         args.type = "pod"
     if args.type == "d":
-        args.type = "deploy"
+        args.type = "deployment"
 
 def args_check():
     if args.pod_name[:3] != "pod":
@@ -398,7 +398,7 @@ def main() -> None:
     if args.type == "pod":
         gen_deploy_file_of_the_pod(pod_file, services)
         gen_service_file_of_the_pod(service_file)
-    elif args.type == "deploy":
+    elif args.type == "deployment":
         if args.verbose:
             print("Generate a deploy files of the Deployment type:")
         for s in services:
