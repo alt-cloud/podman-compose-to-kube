@@ -1,4 +1,4 @@
-podman-compose-to-kube как средство миграция docker-compose решений в kubernetes {#podman_compose_to_kube_как_средство_миграция_docker_compose_решений_в_kubernetes}
+podman-compose-to-kube как средство миграция docker-compose решений в kubernetes 
 --------------------------------------------------------------------------------
 
 Одной из основных проблем миграции `docker-compose` (`docker swarm`)
@@ -251,30 +251,32 @@ HTTP-принимающий запросы, формирующий счетчи�
       [--pvpath &lt;PersistentVolume_directory>] \
       [--user &lt;rootless_user>]\
       [--group &lt;rootless_group>]\
-      [--debug &lt;debug_level>]\
+      [--output(-o) [yml|json]]
+      [--verbose(-v)]\
       &lt;POD_name>\
       &lt;docker-compose_file_name>
 
 ###### Генерация манифестов 
 
 Генерация манифестов для POD-разворачивания производится командой:
+<pre>
+podman-compose-to-kube -v pod_counter docker-compose.yaml
+</pre>
+<pre>
+Generate a POD manifest based on the specified POD
+Replace symbols _ to - in yml elements ending with name(Name)
+Generate list of services in docker-compose file
+Get descriptions of the environment variables
+Generate common POD file
+Generate PersistentVolumeClaims and PersistentVolumes:
+        manifests/default/counter/Pod/PersistentVolumeClaim/counter-redis.yml
+        manifests/default/counter/Pod/PersistentVolume/default-counter-redis.yml
+        /mnt/PersistentVolumes/default/counter-redis
+Generate a deploy file manifests/default/counter/Pod/counter.yml of the Pod type:
+Generate a service file manifests/default/counter/Pod/Service/counter.yml of the Pod type
+</pre>
 
-    podman-compose-to-kube --debug=1 pod_counter docker-compose.yaml
-
-    Generate a POD manifest based on the specified POD
-    Generate a list of scalar yml elements ending with name(Name)
-    Generate a jq request to replace symbols _ with symbols - in selected elements
-    Generate list of services in docker-compose file
-    Add descriptions of the environment variables to the container web
-    Removing the deployment directory manifests/default/counter/Pod
-    Generate common POD YML file
-    Generate PersistentVolumeClaims and PersistentVolumes:
-            manifests/default/counter/Pod/PersistentVolumeClaim/counter-redis.yml
-            manifests/default/counter/Pod/PersistentVolume/default-counter-redis.yml
-            /mnt/PersistentVolumes/default/counter-redis
-    Generate a deploy file manifests/default/counter/Pod/counter.yml of the Pod type:
-
-*Если в выводе шагов генерации нет необходимости флаг `--debug=1` можно
+*Если в выводе шагов генерации нет необходимости флаг `--v` можно
 опустить.*
 
 Первый параметр `pod_counter` указывает имя поднятого `podman-POD`\'а.
@@ -549,36 +551,28 @@ docker-compose YML файл содержит описание только од�
 
 Генерация манифестов для Deployment-разворачивания производится
 командой:
+<pre>
+podman-compose-to-kube -t d -v pod_counter docker-compose.yaml
+</pre>
 
-    podman-compose-to-kube -t d --debug=1 pod_counter docker-compose.yaml
-
-*Если в выводе шагов генерации нет необходимости флаг `--debug=1` можно
+*Если в выводе шагов генерации нет необходимости флаг `-v` можно
 опустить.*
 
 Формат вызова команды для генерации Deployment-разворачивания отличается
 наличием флага `-t d` (`--type=deployment`).
-
-    Generate a POD manifest based on the specified POD
-    Generate a list of scalar yml elements ending with name(Name)
-    Generate a jq request to replace symbols _ with symbols - in selected elements
-    Generate list of services in docker-compose file
-    Add descriptions of the environment variables to the container web
-    Removing the deployment directory manifests/default/counter/Deployment
-    Generate common POD YML file
-    Generate PersistentVolumeClaims and PersistentVolumes:
-            manifests/default/counter/Deployment/PersistentVolumeClaim/counter-redis.yml
-            manifests/default/counter/Deployment/PersistentVolume/default-counter-redis.yml
-            /mnt/PersistentVolumes/default/counter-redis
-    Generate a deploy files of the Deployment type:
-            redis
-                    Add volume descriptions to the container
-                    Generate a deploy  file manifests/default/counter/Deployment/redis.yml
-                    Add descriptions of the ports to the service
-                    Generate a service file manifests/default/counter/Deployment/Service/redis.yml
-            web
-                    Generate a deploy  file manifests/default/counter/Deployment/web.yml
-                    Add descriptions of the ports to the service
-                    Generate a service file manifests/default/counter/Deployment/Service/web.yml
+<pre>
+Generate a POD manifest based on the specified POD
+Replace symbols _ to - in yml elements ending with name(Name)
+Generate list of services in docker-compose file
+Get descriptions of the environment variables
+Generate common POD file
+Generate PersistentVolumeClaims and PersistentVolumes:
+        t/default/counter/Pod/PersistentVolumeClaim/counter-redis.yml
+        t/default/counter/Pod/PersistentVolume/default-counter-redis.yml
+        /mnt/PersistentVolumes/default/counter-redis
+Generate a deploy file t/default/counter/Pod/counter.yml of the Pod type:
+Generate a service file t/default/counter/Pod/Service/counter.yml of the Pod type
+</pre>
 
 После вызова команды в текущем каталоге создастся подкаталог `manifests`
 следующей структуры:
