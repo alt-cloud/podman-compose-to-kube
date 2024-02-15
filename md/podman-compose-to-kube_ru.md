@@ -10,7 +10,8 @@ podman-compose-to-kube \
   [--pvpath &lt;PersistentVolume_directory>] \
   [--user &lt;rootless_user>]\
   [--group &lt;rootless_group>]\
-  [--debug &lt;debug_level>]\
+  [--output(-o) [yml|json]]\
+  [--verbose(-v)]\
   &lt;POD_name>\
   &lt;docker-compose_file_name>
 </pre>
@@ -183,7 +184,8 @@ kubectl delete -R -f manifests/&lt;namespace1>/&lt;podName>/Deployment
 * `-pvpath` - каталог монтирования PersistentVolume томов. Значение по умолчанию - `/mnt/PersistentVolumes/`.
 * `--user` (`-u`) имя rootless пользователя от которого работает kubernetes . Значение по умолчанию - пустая строка.
 * `--group` (`-g`) - группа rootless пользователя от которого работает kubernetes. Значение по умолчанию - `=user`.
-* `--debug` - уровень отладки. Значение по умолчанию - `0`.
+* `--output` (`-o`) - формат вывода yml или json.
+* `--verbose` (`-v`) - отобразить подробности. 
 
 Позиционные параметры:
 

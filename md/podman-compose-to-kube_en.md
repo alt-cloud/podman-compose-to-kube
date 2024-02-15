@@ -10,7 +10,8 @@ podman-compose-to-kube\
    [--pvpath &lt;PersistentVolume_directory>] \
    [--user &lt;rootless_user>]\
    [--group &lt;rootless_group>]\
-   [--debug &lt;debug_level>]\
+   [--output(-o) [yml|json]]\
+   [--verbose(-v)]\
    &lt;POD_name>\
    &lt;docker-compose_file_name>
 </pre>
@@ -185,7 +186,8 @@ Team flags:
 * `-pvpath` - directory for mounting PersistentVolume volumes. The default value is `/mnt/PersistentVolumes/`.
 * `--user` (`-u`) the name of the rootless user from which kubernetes runs. The default value is the empty string.
 * `--group` (`-g`) - group of the rootless user from which kubernetes runs. The default value is `=user`.
-* `--debug` - debug level. The default value is `0`.
+* `--output` (`-o`) - output format: `yml` or `json`.
+* `--verbose` (`-v`) - verbose. 
 
 Positional parameters:
 
