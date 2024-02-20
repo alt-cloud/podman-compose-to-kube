@@ -8,6 +8,7 @@ import pwd
 
 import yaml
 
+__version__ = "2.0.0"
 
 parser = argparse.ArgumentParser(description="Podman compose to k8s")
 parser.add_argument(

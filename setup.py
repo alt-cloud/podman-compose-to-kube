@@ -36,11 +36,9 @@ setup(
     license="GPL-2.0-only",
     install_requires=[
         "pyyaml",
-        "yaml"
     ],
     extras_require={
       "devel": [
-        "yaml",
       ]
     }
 )
