@@ -251,7 +251,7 @@ HTTP-принимающий запросы, формирующий счетчи�
       [--pvpath &lt;PersistentVolume_directory>] \
       [--user &lt;rootless_user>]\
       [--group &lt;rootless_group>]\
-      [--output(-o) [yml|json]]
+      [--output(-o) [yml|json]]\
       [--verbose(-v)]\
       &lt;POD_name>\
       &lt;docker-compose_file_name>
