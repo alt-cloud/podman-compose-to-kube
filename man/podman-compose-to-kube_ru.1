@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "PODMAN\-COMPOSE\-TO\-KUBE" "1" "January 2024" "" ""
+.TH "PODMAN\-COMPOSE\-TO\-KUBE" "1" "February 2024" "" ""
 .
 .SH "NAME"
 \fBpodman\-compose\-to\-kube\fR \- генерации kubernetes манифестов на основе поднятого podman\-compose POD\'а
@@ -18,7 +18,8 @@ podman\-compose\-to\-kube \e
   [\-\-pvpath <PersistentVolume_directory>] \e
   [\-\-user <rootless_user>]\e
   [\-\-group <rootless_group>]\e
-  [\-\-debug <debug_level>]\e
+  [\-\-output(\-o) [yml|json]]\e
+  [\-\-verbose(\-v)]\e
   <POD_name>\e
   <docker\-compose_file_name>
 .
@@ -289,7 +290,10 @@ kubectl delete \-R \-f manifests/<namespace1>/<podName>/Deployment
 \fB\-\-group\fR (\fB\-g\fR) \- группа rootless пользователя от которого работает kubernetes\. Значение по умолчанию \- \fB=user\fR\.
 .
 .IP "\(bu" 4
-\fB\-\-debug\fR \- уровень отладки\. Значение по умолчанию \- \fB0\fR\.
+\fB\-\-output\fR (\fB\-o\fR) \- формат вывода yml или json\.
+.
+.IP "\(bu" 4
+\fB\-\-verbose\fR (\fB\-v\fR) \- отобразить подробности\.
 .
 .IP "" 0
 .

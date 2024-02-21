@@ -1,7 +1,7 @@
 .\" generated with Ronn/v0.7.3
 .\" http://github.com/rtomayko/ronn/tree/0.7.3
 .
-.TH "PODMAN\-COMPOSE\-TO\-KUBE" "1" "January 2024" "" ""
+.TH "PODMAN\-COMPOSE\-TO\-KUBE" "1" "February 2024" "" ""
 .
 .SH "NAME"
 \fBpodman\-compose\-to\-kube\fR \- generate kubernetes manifests based on the running podman\-compose POD
@@ -18,7 +18,8 @@ podman\-compose\-to\-kube\e
    [\-\-pvpath <PersistentVolume_directory>] \e
    [\-\-user <rootless_user>]\e
    [\-\-group <rootless_group>]\e
-   [\-\-debug <debug_level>]\e
+   [\-\-output(\-o) [yml|json]]\e
+   [\-\-verbose(\-v)]\e
    <POD_name>\e
    <docker\-compose_file_name>
 .
@@ -292,7 +293,10 @@ Team flags:
 \fB\-\-group\fR (\fB\-g\fR) \- group of the rootless user from which kubernetes runs\. The default value is \fB=user\fR\.
 .
 .IP "\(bu" 4
-\fB\-\-debug\fR \- debug level\. The default value is \fB0\fR\.
+\fB\-\-output\fR (\fB\-o\fR) \- output format: \fByml\fR or \fBjson\fR\.
+.
+.IP "\(bu" 4
+\fB\-\-verbose\fR (\fB\-v\fR) \- verbose\.
 .
 .IP "" 0
 .
