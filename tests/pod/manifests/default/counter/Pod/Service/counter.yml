@@ -1,0 +1,23 @@
+# Created with podman-compose-to-kube 1.0.0-alt1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: '2024-02-11T16:15:20Z'
+  labels:
+    app: counter
+  name: counter
+  namespace: default
+spec:
+  ports:
+  - name: '6379'
+    nodePort: 31373
+    port: 6379
+    targetPort: 6379
+  - name: '8080'
+    nodePort: 30006
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: counter
+  type: NodePort

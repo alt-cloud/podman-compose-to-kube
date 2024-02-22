@@ -1,0 +1,22 @@
+# Save the output of this file and use kubectl create -f to import
+# it into Kubernetes.
+#
+# Created with podman-4.8.3
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    volume.podman.io/driver: local
+  creationTimestamp: "2024-02-11T16:16:08Z"
+  labels:
+    com.docker.compose.project: counter
+    io.podman.compose.project: counter
+  name: counter_redis
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+status: {}
+
