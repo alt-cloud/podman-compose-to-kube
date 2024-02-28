@@ -37,6 +37,7 @@ setup(
     license="GPL-2.0-only",
     install_requires=[
         "pyyaml",
+        "pytest"
     ],
     extras_require={
       "devel": [
