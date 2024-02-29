@@ -290,8 +290,14 @@ def comparison_dirs(input_dir, output_dir):
 def test_main(
     mock_parse_args, mock_generate_a_k8s_service_file, mock_podman_kube_generate, t
 ):
-    os.mkdir(os.path.join(os.getcwd(), "tests/output"))
-    os.mkdir(os.path.join(os.getcwd(), "tests/output/mnt"))
+    try:
+        os.mkdir(os.path.join(os.getcwd(), "tests/output"))
+    except FileExistsError:
+        pass
+    try:
+        os.mkdir(os.path.join(os.getcwd(), "tests/output/mnt"))
+    except FileExistsError:
+        pass
     mock_args = mock.Mock()
     mock_args.type = t
     mock_args.namespace = "default"
