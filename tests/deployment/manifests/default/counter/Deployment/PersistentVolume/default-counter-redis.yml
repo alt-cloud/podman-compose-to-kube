@@ -15,5 +15,5 @@ spec:
     name: counter-redis
     namespace: default
   hostPath:
-    path: /home/alexander/projects/podman-compose-to-kube/./tests/output/mnt/PersistentVolumes/default/counter-redis
+    path: /mnt/PersistentVolumes/default/counter-redis
   storageClassName: manual

@@ -277,7 +277,9 @@ def comparison_dirs(input_dir, output_dir):
             comparison_dirs(f"{input_dir}/{ic}", f"{output_dir}/{ic}")
         elif os.path.isfile(f"{input_dir}/{ic}"):
             input_file = read_file(f"{input_dir}/{ic}")
-            output_file = read_file(f"{output_dir}/{ic}")
+            output_file = read_file(f"{output_dir}/{ic}").replace(
+                f"{os.getcwd()}/./tests/output", ""
+            )
             assert input_file == output_file
 
 
