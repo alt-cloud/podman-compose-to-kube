@@ -1,0 +1,39 @@
+# Created with podman-compose-to-kube 1.0.0-alt1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: redis
+  name: redis
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - args:
+        - redis-server
+        - --appendonly
+        - 'yes'
+        - --notify-keyspace-events
+        - Ex
+        image: docker.io/library/redis:alpine
+        name: counterredis1
+        ports:
+        - containerPort: 6379
+        securityContext:
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - mountPath: /data
+          name: counter-redis-pvc
+      volumes:
+      - name: counter-redis-pvc
+        persistentVolumeClaim:
+          claimName: counter-redis

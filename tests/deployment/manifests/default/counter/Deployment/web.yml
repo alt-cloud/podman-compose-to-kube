@@ -1,0 +1,31 @@
+# Created with podman-compose-to-kube 1.0.0-alt1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: web
+  name: web
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - env:
+        - name: REDIS_HOST
+          value: redis
+        - name: REDIS_PORT
+          value: '6379'
+        image: localhost/hello-py-aioweb:latest
+        name: counterweb1
+        ports:
+        - containerPort: 8080
+        securityContext:
+          readOnlyRootFilesystem: true

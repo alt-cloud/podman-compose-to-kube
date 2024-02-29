@@ -10,107 +10,108 @@ import yaml
 
 __version__ = "2.0.0"
 
-parser = argparse.ArgumentParser(description="Podman compose to k8s")
-parser.add_argument(
-    "-t",
-    "--type",
-    type=str,
-    choices=["pod", "p", "deployment", "d"],
-    default="pod",
-    help="deployment type",
-)
-parser.add_argument(
-    "-n",
-    "--namespace",
-    type=str,
-    default="default",
-    help="namespace"
-)
-parser.add_argument(
-    "-d",
-    "--dir",
-    type=str,
-    default="manifests",
-    help="manifests directory"
-)
-parser.add_argument(
-    "-p",
-    "--pvpath",
-    type=str,
-    default="/mnt/PersistentVolumes",
-    help="PersistentVolume directory",
-)
-parser.add_argument(
-    "-u",
-    "--user",
-    type=str,
-    default="",
-    help="rootless user"
-)
-parser.add_argument(
-    "-g",
-    "--group",
-    type=str,
-    default="",
-    help="rootless group"
-)
-parser.add_argument(
-    "-o",
-    "--output",
-    type=str,
-    choices=["yml", "json"],
-    default="yml",
-    help="output files format"
-)
-parser.add_argument(
-    "-v",
-    "--verbose",
-    action="store_true"
-)
-parser.add_argument(
-    "pod_name",
-    type=str,
-    help="pod name"
-)
-parser.add_argument(
-    "docker_compose_file_name",
-    type=str,
-    help="docker compose file name"
-)
-args = parser.parse_args()
 
+class Info:
+    def __init__(
+        self, kube_name, deploy_dir, service_dir, volume_dir, persistent_volume_dir
+    ) -> None:
+        self.kube_name = kube_name
+        self.deploy_dir = deploy_dir
+        self.service_dir = service_dir
+        self.volume_dir = volume_dir
+        self.persistent_volume_dir = persistent_volume_dir
 
-def set_default_group():
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Podman compose to k8s")
+    parser.add_argument(
+        "-t",
+        "--type",
+        type=str,
+        choices=["pod", "p", "deployment", "d"],
+        default="pod",
+        help="deployment type",
+    )
+    parser.add_argument(
+        "-n",
+        "--namespace",
+        type=str,
+        default="default",
+        help="namespace"
+    )
+    parser.add_argument(
+        "-d",
+        "--dir",
+        type=str,
+        default="manifests",
+        help="manifests directory"
+    )
+    parser.add_argument(
+        "-p",
+        "--pvpath",
+        type=str,
+        default="/mnt/PersistentVolumes",
+        help="PersistentVolume directory",
+    )
+    parser.add_argument(
+        "-u",
+        "--user",
+        type=str,
+        default="",
+        help="rootless user"
+    )
+    parser.add_argument(
+        "-g",
+        "--group",
+        type=str,
+        default="",
+        help="rootless group"
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=str,
+        choices=["yml", "json"],
+        default="yml",
+        help="output files format"
+    )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true"
+    )
+    parser.add_argument(
+        "pod_name",
+        type=str,
+        help="pod name"
+    )
+    parser.add_argument(
+        "docker_compose_file_name",
+        type=str,
+        help="docker compose file name"
+    )
+    return parser.parse_args()
+
+def set_default_group(args: argparse.Namespace):
     if args.group == "":
         args.group = args.user
 
-def set_type():
+def set_type(args: argparse.Namespace):
     if args.type == "p":
         args.type = "pod"
     if args.type == "d":
         args.type = "deployment"
 
-def args_check():
+def args_check(args: argparse.Namespace):
     if args.pod_name[:3] != "pod":
         print("Incorrect POD name")
+        raise
 
-def set_kube_name() -> str:
+def set_kube_name(args: argparse.Namespace) -> str:
     if args.pod_name[:3] == "pod":
         kube_name = args.pod_name[3:]
         if kube_name[0] == "-" or kube_name[0] == "_":
             kube_name = kube_name[1:]
     return kube_name
-
-set_default_group()
-set_type()
-args_check()
-kube_name = set_kube_name()
-namespace_dir = f"{args.dir}/{args.namespace}"
-kube_dir = f"{namespace_dir}/{kube_name}"
-deploy_dir = f"{kube_dir}/{args.type.capitalize()}"
-service_dir = f"{deploy_dir}/Service"
-volume_dir = f"{deploy_dir}/PersistentVolumeClaim"
-persistent_volume_dir = f"{deploy_dir}/PersistentVolume"
 
 def mkdirs(dirs: list[str]) -> None:
     for d in dirs:
@@ -198,7 +199,7 @@ def podman_kube_generate(volume_name: str) -> str:
         print(f'Volume "{volume_name}" does not exists')
         raise
 
-def write_yaml_to_file(yaml_section: dict, file_path: str) -> None:
+def write_yaml_to_file(yaml_section: dict, file_path: str, args: argparse.Namespace) -> None:
     if args.output == 'yml':
         yaml.Dumper.ignore_aliases = lambda *args: True
         file_info = "# Created with podman-compose-to-kube 1.0.0-alt1\n"
@@ -210,7 +211,7 @@ def write_yaml_to_file(yaml_section: dict, file_path: str) -> None:
         f.write(file_info)
 
 def gen_persistent_volume_file(
-    name: str, claim_ref_name: str, size: str, path: str
+    name: str, claim_ref_name: str, size: str, path: str, args: argparse.Namespace
 ) -> dict:
     pv = {
         "apiVersion": "v1",
@@ -226,7 +227,7 @@ def gen_persistent_volume_file(
     }
     return pv
 
-def get_deploy_file(name: str, containers: dict) -> dict:
+def get_deploy_file(name: str, containers: dict, args: argparse.Namespace) -> dict:
     deploy = {
         "apiVersion": "apps/v1",
         "kind": "Deployment",
@@ -252,43 +253,43 @@ def set_environment(service_file: dict, environment: list) -> dict:
             service_file["spec"]["containers"][j]["env"] = environment
     return service_file
 
-def gen_deploy_file_of_the_pod(pod_file: dict, services: list) -> None:
-    deploy_file_path = f"{deploy_dir}/{kube_name}.{args.output}"
+def gen_deploy_file_of_the_pod(pod_file: dict, services: list, args: argparse.Namespace, info: Info) -> None:
+    deploy_file_path = f"{info.deploy_dir}/{info.kube_name}.{args.output}"
     if args.verbose:
         print(f"Generate a deploy file {deploy_file_path} of the Pod type:")
-    pod_file["metadata"]["name"] = kube_name
-    pod_file["metadata"]["labels"]["app"] = kube_name
+    pod_file["metadata"]["name"] = info.kube_name
+    pod_file["metadata"]["labels"]["app"] = info.kube_name
     pod_file["metadata"]["namespace"] = args.namespace
     pod_file["spec"]["hostAliases"] = [{"ip": "127.0.0.1", "hostnames": services}]
-    write_yaml_to_file(pod_file, deploy_file_path)
+    write_yaml_to_file(pod_file, deploy_file_path, args)
 
-def gen_service_file_of_the_pod(service_file: dict) -> None:
-    service_file_path = f"{service_dir}/{kube_name}.{args.output}"
+def gen_service_file_of_the_pod(service_file: dict, args: argparse.Namespace, info: Info) -> None:
+    service_file_path = f"{info.service_dir}/{info.kube_name}.{args.output}"
     if args.verbose:
         print(f"Generate a service file {service_file_path} of the Pod type")
-    service_file["metadata"]["name"] = kube_name
+    service_file["metadata"]["name"] = info.kube_name
     service_file["metadata"]["namespace"] = args.namespace
-    service_file["metadata"]["labels"]["app"] = kube_name
-    service_file["spec"]["selector"]["app"] = kube_name
-    write_yaml_to_file(service_file, service_file_path)
+    service_file["metadata"]["labels"]["app"] = info.kube_name
+    service_file["spec"]["selector"]["app"] = info.kube_name
+    write_yaml_to_file(service_file, service_file_path, args)
 
-def gen_pvs(service_file: dict) -> None:
+def gen_pvs(service_file: dict, args: argparse.Namespace, info: Info) -> None:
     if "volumes" in service_file["spec"].keys():
         if args.verbose:
             print("Generate PersistentVolumeClaims and PersistentVolumes:")
         volume_names = get_volume_names(service_file)
         for vn in volume_names:
-            volume_file_path = f"{volume_dir}/{vn}.{args.output}"
+            volume_file_path = f"{info.volume_dir}/{vn}.{args.output}"
             volume_yaml = podman_kube_generate(vn)
             volume = parse_yaml(volume_yaml)
             volume = replace_underscores_in_names_elements(volume)
             for v in volume.keys():
                 volume[v]["metadata"]["namespace"] = args.namespace
                 volume[v]["spec"]["storageClassName"] = "manual"
-                write_yaml_to_file(volume[v], volume_file_path)
+                write_yaml_to_file(volume[v], volume_file_path, args)
                 pv_size = volume[v]["spec"]["resources"]["requests"]["storage"]
                 pv_name = f"{args.namespace}-{vn}"
-                pv_file = f"{persistent_volume_dir}/{pv_name}.{args.output}"
+                pv_file = f"{info.persistent_volume_dir}/{pv_name}.{args.output}"
                 pv_path = f"{args.pvpath}/{args.namespace}/{vn}"
                 if args.verbose:
                     print(f"\t{volume_file_path}")
@@ -303,21 +304,21 @@ def gen_pvs(service_file: dict) -> None:
                     )
                 pv_path = pv_path if pv_path[0] == '/' else os.path.join(os.getcwd(), pv_path)
                 persistent_volume = gen_persistent_volume_file(
-                    pv_name, vn, pv_size, pv_path
+                    pv_name, vn, pv_size, pv_path, args
                 )
-                write_yaml_to_file(persistent_volume, pv_file)
+                write_yaml_to_file(persistent_volume, pv_file, args)
 
-def get_ports(compose_file: dict, service: str) -> list:
+def get_ports(compose_file: dict, service: str, args: argparse.Namespace) -> list:
     if compose_file["services"][service]["ports"]:
         if args.verbose:
             print("\t\tAdd descriptions of the ports to the service")
         ports = compose_file["services"][service]["ports"]
-    return ports
+        return ports
 
-def gen_service_files(compose: dict, k8s_service_file: dict, service: str) -> None:
+def gen_service_files(compose: dict, k8s_service_file: dict, service: str, args: argparse.Namespace, info: Info) -> None:
     for i in compose.keys():
-        ports = get_ports(compose[i], service)
-        service_file_path = f"{service_dir}/{service}.{args.output}"
+        ports = get_ports(compose[i], service, args)
+        service_file_path = f"{info.service_dir}/{service}.{args.output}"
         if args.verbose:
             print(f"\t\tGenerate a service file {service_file_path}")
         for e in k8s_service_file.keys():
@@ -333,28 +334,42 @@ def gen_service_files(compose: dict, k8s_service_file: dict, service: str) -> No
                 service_file["metadata"]["labels"]["app"] = service
                 service_file["metadata"]["namespace"] = args.namespace
                 service_file["spec"]["selector"]["app"] = service
-                write_yaml_to_file(service_file, service_file_path)
+                write_yaml_to_file(service_file, service_file_path, args)
 
-def gen_deploy_file(pod_file: dict, service: str) -> None:
+def gen_deploy_file(
+    pod_file: dict, service: str, args: argparse.Namespace, info: Info
+) -> None:
     if args.verbose:
         print(f"\t{service}")
     volumes = pod_file["spec"]["volumes"]
     for v in volumes:
         volume = v["name"]
-        deploy_file_path = f"{deploy_dir}/{service}.{args.output}"
+        deploy_file_path = f"{info.deploy_dir}/{service}.{args.output}"
         containers = pod_file["spec"]["containers"]
         for c in containers:
             if service in c["name"]:
-                deploy = get_deploy_file(service, c)
+                deploy = get_deploy_file(service, c, args)
         if service in volume:
             if args.verbose:
                 print("\t\tAdd volume descriptions to the container")
             deploy["spec"]["template"]["spec"]["volumes"] = [v]
         if args.verbose:
             print(f"\t\tGenerate a deploy file {deploy_file_path}")
-        write_yaml_to_file(deploy, deploy_file_path)
+        write_yaml_to_file(deploy, deploy_file_path, args)
 
 def main() -> None:
+    args = parse_args()
+    set_default_group(args)
+    set_type(args)
+    args_check(args)
+    kube_name = set_kube_name(args)
+    namespace_dir = f"{args.dir}/{args.namespace}"
+    kube_dir = f"{namespace_dir}/{kube_name}"
+    deploy_dir = f"{kube_dir}/{args.type.capitalize()}"
+    service_dir = f"{deploy_dir}/Service"
+    volume_dir = f"{deploy_dir}/PersistentVolumeClaim"
+    persistent_volume_dir = f"{deploy_dir}/PersistentVolume"
+    info = Info(kube_name, deploy_dir, service_dir, volume_dir, persistent_volume_dir)
     dirs = [
         args.dir,
         namespace_dir,
@@ -392,18 +407,18 @@ def main() -> None:
     for i in k8s_service_file.keys():
         if k8s_service_file[i]["kind"] == "Pod":
             pod_file = set_environment(k8s_service_file[i], environment)
-            gen_pvs(k8s_service_file[i])
+            gen_pvs(k8s_service_file[i], args, info)
         if k8s_service_file[i]["kind"] == "Service":
             service_file = k8s_service_file[i]
     if args.type == "pod":
-        gen_deploy_file_of_the_pod(pod_file, services)
-        gen_service_file_of_the_pod(service_file)
+        gen_deploy_file_of_the_pod(pod_file, services, args, info)
+        gen_service_file_of_the_pod(service_file, args, info)
     elif args.type == "deployment":
         if args.verbose:
             print("Generate a deploy files of the Deployment type:")
         for s in services:
-            gen_deploy_file(pod_file, s)
-            gen_service_files(compose, k8s_service_file, s)
+            gen_deploy_file(pod_file, s, args, info)
+            gen_service_files(compose, k8s_service_file, s, args, info)
 
 if __name__ == "__main__":
     main()

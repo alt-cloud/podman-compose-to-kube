@@ -1,0 +1,47 @@
+# Created with podman-compose-to-kube 1.0.0-alt1
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: '2024-02-11T16:15:20Z'
+  labels:
+    app: counter
+  name: counter
+  namespace: default
+spec:
+  containers:
+  - args:
+    - redis-server
+    - --appendonly
+    - 'yes'
+    - --notify-keyspace-events
+    - Ex
+    image: docker.io/library/redis:alpine
+    name: counterredis1
+    ports:
+    - containerPort: 6379
+    securityContext:
+      readOnlyRootFilesystem: true
+    volumeMounts:
+    - mountPath: /data
+      name: counter-redis-pvc
+  - env:
+    - name: REDIS_HOST
+      value: redis
+    - name: REDIS_PORT
+      value: '6379'
+    image: localhost/hello-py-aioweb:latest
+    name: counterweb1
+    ports:
+    - containerPort: 8080
+    securityContext:
+      readOnlyRootFilesystem: true
+  hostAliases:
+  - hostnames:
+    - redis
+    - web
+    ip: 127.0.0.1
+  volumes:
+  - name: counter-redis-pvc
+    persistentVolumeClaim:
+      claimName: counter-redis
