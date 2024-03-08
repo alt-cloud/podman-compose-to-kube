@@ -131,6 +131,9 @@ def generate_a_k8s_service_file(pod_name: str) -> str:
         output = os.popen(cmd, "r")
         for l in output:
             rez += l
+        status = output.close()
+        if status:
+            raise
         return rez
     except:
         print(f'Service "{pod_name}" does not exists')
@@ -194,6 +197,9 @@ def podman_kube_generate(volume_name: str) -> str:
         output = os.popen(cmd, "r")
         for l in output:
             rez += l
+        status = output.close()
+        if status:
+            raise
         return rez
     except:
         print(f'Volume "{volume_name}" does not exists')
