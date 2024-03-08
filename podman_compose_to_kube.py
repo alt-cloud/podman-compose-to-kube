@@ -396,7 +396,7 @@ def main() -> None:
     if args.verbose:
         print("Replace symbols _ to - in yml elements ending with name(Name)")
     k8s_service_file = parse_yaml(k8s_service_file)
-    k8s_service_file = replace_underscores_in_names_elements(k8s_service_file)
+    k8s_service_file_with_correct_names = replace_underscores_in_names_elements(k8s_service_file)
     if args.verbose:
         print("Generate list of services in docker-compose file")
     compose_file = read_file(args.docker_compose_file_name)
@@ -412,10 +412,10 @@ def main() -> None:
         print("Generate common POD file")
     for i in k8s_service_file.keys():
         if k8s_service_file[i]["kind"] == "Pod":
-            pod_file = set_environment(k8s_service_file[i], environment)
+            pod_file = set_environment(k8s_service_file_with_correct_names[i], environment)
             gen_pvs(k8s_service_file[i], args, info)
         if k8s_service_file[i]["kind"] == "Service":
-            service_file = k8s_service_file[i]
+            service_file = k8s_service_file_with_correct_names[i]
     if args.type == "pod":
         gen_deploy_file_of_the_pod(pod_file, services, args, info)
         gen_service_file_of_the_pod(service_file, args, info)
@@ -424,7 +424,7 @@ def main() -> None:
             print("Generate a deploy files of the Deployment type:")
         for s in services:
             gen_deploy_file(pod_file, s, args, info)
-            gen_service_files(compose, k8s_service_file, s, args, info)
+            gen_service_files(compose, k8s_service_file_with_correct_names, s, args, info)
 
 if __name__ == "__main__":
     main()
