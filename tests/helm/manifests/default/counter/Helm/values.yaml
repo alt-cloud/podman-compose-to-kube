@@ -1,0 +1,5 @@
+web:
+  replicaCount: 2
+
+redis:
+  replicaCount: 1

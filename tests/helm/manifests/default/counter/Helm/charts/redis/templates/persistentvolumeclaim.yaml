@@ -1,0 +1,21 @@
+# Created with podman-compose-to-kube 1.0.0-alt1
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    volume.podman.io/driver: local
+  creationTimestamp: '2024-03-07T06:27:20Z'
+  labels:
+    com.docker.compose.project: counter
+    io.podman.compose.project: counter
+  name: counter-redis
+  namespace: default
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: manual
+status: {}
