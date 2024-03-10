@@ -1,4 +1,4 @@
-+# podman-compose-to-kube - tool of migrating docker-compose solutions to kubernetes
+# podman-compose-to-kube - tool of migrating docker-compose solutions to kubernetes
 
 One of the main problems on `docker-compose` (`docker swarm`) migration
 solutions in `kubernetes` is the generation of `kubernetes-manifests` from
