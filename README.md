@@ -824,7 +824,7 @@ deployment.apps "web" deleted
 
 ## Features of deployment in a rootless environment
 
-> This section describes running the generated manifests in a `rootless environment`, formed as part of the [podsec] package(https://github.com/alt-cloud/podsec)
+> This section describes running the generated manifests in a `rootless environment`, formed as part of the [podsec package](https://github.com/alt-cloud/podsec)
 
 ### Specifying a username when generating manifests
 
