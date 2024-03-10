@@ -1,268 +1,247 @@
-podman-compose-to-kube как средство миграция docker-compose решений в kubernetes 
---------------------------------------------------------------------------------
+# podman-compose-to-kube - tool of migrating docker-compose solutions to kubernetes
 
-Одной из основных проблем миграции `docker-compose` (`docker swarm`)
-решений в `kubernetes` является генерация `kubernetes-манифестов` из
-`YAML-файлов описания стека сервисов`. Существует достаточно бедный
-набор инструментов, решающий данную проблему. Данный документ описывает
-решение данной проблемы путем использования команд
-[podman-compose](https://github.com/containers/podman-compose),
+One of the main problems on `docker-compose` (`docker swarm`) migration
+solutions in `kubernetes` is the generation of `kubernetes-manifests` from
+`YAML files describing the service stack`. There is quite a poor one
+a set of tools that solves this problem. This document describes
+solving this problem by using commands
+[podman-compose](https://github.com/containers/podman-compose) and
 [podman-compose-to-kube](https://github.com/alt-cloud/podman-compose-to-kube).
 
-В качестве примера разворачивания стека будет использоваться
-`docker-compose` стек
+An example of stack deployments will be used
+`docker-compose` stack of
 [hello-python](https://github.com/containers/podman-compose/tree/devel/examples/hello-python)
-проекта `podman-compose`.
+project `podman-compose`.
 
-Будут рассмотрены вопросы разворачивания миграции как `rootfull` так и
-`rootless-решений`.
+Describes options for deploying both `rootfull` and
+`rootless solutions`.
 
-### Установка ПО, создание пользователей, разворачивание kubernetes 
 
-Для разворачивания `docker-compose` стеков необходимо установить пакеты
-`podman-compose`, `podman-compose-to-kube`.
+## Deploying docker-compose stack into podman-compose
 
-#### rootfull-окружение 
+### Loading hello-python service stack description
 
-Разворачивание решений в `roofull` окружении производится под
-пользователем `root`. В создании других пользователей необходимости нет.
-Разворачивание `roofull-kubernetes` описано в документе
-[Kubernetes](Kubernetes "wikilink").
-
-#### rootless-решение
-
-Разворачивание `rooless-kubernetes` описано в документе [Rootless
-kubernetes](Rootless_kubernetes "wikilink"). В процессе его
-разворачивания создается пользователь `u7s-admin`. Вы можете
-разворачивать rootless podman-compose стек либо в рамках этого
-пользователя либо создать пользователя, имеющий право загружать образы с
-внешний репозиториев. В защищенных платформах `c10f.` это пользователи,
-входящие в группу `podman_dev`. Пользователь `u7s-admin` входит в эту
-группу.
-
-### Разворачивание docker-compose стека в podman-compose 
-
-#### Загрузка описания стека сервисов hello-python 
-
-Скопируйте содержимое каталога
+Copy the contents of the directory
 [hello-python](https://github.com/containers/podman-compose/tree/devel/examples/hello-python).
 
-Если у Вас установлен git это можно сделать командами:
+If you have git installed, this can be done with the commands:
+```
+# git clone -n --depth=1 --filter=tree:0 https://github.com/containers/podman-compose.git
+# cd podman-compose/
+# git sparse-checkout set --no-cone examples/hello-python
+# git checkout
+```
+After executing commands in the directory
+`podman-compose/examples/hello-python` will expand the contents of the specified
+above the catalogue.
 
-    # git clone -n --depth=1 --filter=tree:0 https://github.com/containers/podman-compose.git
-    # cd podman-compose/
-    # git sparse-checkout set --no-cone examples/hello-python
-    # git checkout
+### Deploying a service stack
 
-После выполнения команд в каталоге
-`podman-compose/examples/hello-python` развернется содержание указанного
-выше каталога.
+#### Description of the service stack
 
-#### Разворачивание стека сервисов 
-
-##### Описание стека сервисов
-
-Перейдите в каталог `podman-compose/examples/hello-python`. В каталогн
-присутсвует файл `docker-compose.yml` описание стека сервисов:
-
-    ---
-    version: '3'
+Go to the `podman-compose/examples/hello-python` directory. In the catalog
+there is a file `docker-compose.yml` describing the service stack:
+```
+version: '3'
+volumes:
+  redis:
+services:
+  redis:
+    read_only: true
+    image: docker.io/redis:alpine
+    command: ["redis-server", "--appendonly", "yes", "--notify-keyspace-events", "Ex"]
     volumes:
-      redis:
-    services:
-      redis:
-        read_only: true
-        image: docker.io/redis:alpine
-        command: ["redis-server", "--appendonly", "yes", "--notify-keyspace-events", "Ex"]
-        volumes:
-        - redis:/data
-      web:
-        read_only: true
-        build:
-          context: .
-        image: hello-py-aioweb
-        ports:
-        - 8080:8080
-        environment:
-          REDIS_HOST: redis
+    - redis:/data
+  web:
+    read_only: true
+    build:
+      context: .
+    image: hello-py-aioweb
+    ports:
+    - 8080:8080
+    environment:
+      REDIS_HOST: redis
+```
 
-В сервисе `redis` запускается контейнер с томом `redis` и портом для
-внешнего доступа `6379`.
+The `redis` service starts a container with a `redis` volume and a port for
+external access `6379`.
 
-В сервисе `web` собирается образ `hello-py-aioweb`, получающий имя
-`localhost/hello-py-aioweb` и на его основе запускается контейнер,
-обеспечивающий прием HTTP-запросов по порту `8080`. Образ
-`localhost/hello-py-aioweb` собирается на основе `Dockerfile`:
+The `web` service collects the `hello-py-aioweb` image.
+The image is named `localhost/hello-py-aioweb`.
+Based on it, a container is created that supports receiving HTTP requests on port `8080`.
+The `localhost/hello-py-aioweb` image is built based on the `Dockerfile`:
+```
+FROM python:3.9-alpine
 
-    FROM python:3.9-alpine
+WORKDIR /usr/src/app
 
-    WORKDIR /usr/src/app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-    COPY requirements.txt ./
-    RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
 
-    COPY . .
+CMD [ "python", "-m", "app.web" ]
+EXPOSE 8080
+```
 
-    CMD [ "python", "-m", "app.web" ]
-    EXPOSE 8080
+When the container starts, the python script `app/web.py` is launched.
+The script accepts HTTP requests and generates a request counter in the redis database.
+The response is a text containing the request number in the database.
 
-При запуске контейнера запускается python-скрипт `app/web.py`,
-HTTP-принимающий запросы, формирующий счетчик запросов в redis-базе и
-возвращающий текст с номером запроса.
+#### Deployment a service stack
 
-##### Запуск стека сервисов 
-
-Перед запуском стека сервисов необходимо уточнить файл
+Before starting the service stack, you need to clarify the file
 `docker-compose.yml`:
-
-    version: '3'
+```
+version: '3'
+volumes:
+  redis:
+  redis1:
+services:
+  redis:
+    read_only: true
+    image: docker.io/redis:alpine
+    command: ["redis-server", "--appendonly", "yes", "--notify-keyspace-events", "Ex"]
     volumes:
-      redis:
-      redis1:
-    services:
-      redis:
-        read_only: true
-        image: docker.io/redis:alpine
-        command: ["redis-server", "--appendonly", "yes", "--notify-keyspace-events", "Ex"]
-        volumes:
-        - redis:/data
-        ports:
-        - 6379
-      web:
-        read_only: true
-        build:
-          context: .
-        image: hello-py-aioweb
-        ports:
-        - 8080:8080
-        environment:
-          REDIS_HOST: redis
-          REDIS_PORT: 6379
+    - redis:/data
+    ports:
+    - 6379
+  web:
+    read_only: true
+    build:
+      context: .
+    image: hello-py-aioweb
+    ports:
+    - 8080:8080
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+```
+Two changes have been made to the file:
 
-В файл внесены два изменения:
+1. A description of port `6379` has been added to the `redis` service.
+2. A description of the variable `REDIS_PORT: 6379` has been added to the `web` service.
 
-1.  В сервис `redis` добавлено описание порта `6379`.
-2.  В сервис `web` добавлено описание переменной `REDIS_PORT: 6379`.
+Both of these changes are necessary when deploying kubernet services to
+`Deployment` mode.
 
-Оба эти изменения необходимы при разворачивании kubernet-сервисов в
-режиме `Deployment`.
+The first change is due to the fact that if the port description is missing, then
+will not be generated during generation due to lack of information
+The `YML file describing the kubernet service` and the `redis container` will be
+not accessible from the `web` container.
 
-Первое изменения связано с тем, что если описание порта отсутствует, то
-при генерации из за отсутствия информации не сгенерируется
-`YML-файл описания kubernet-сервиса` и `redis-контейнер` будет
-недоступен из контейнера `web`.
+The second change is due to the fact that in the `Deployment` mode the container
+`web` exports the `REDIS_PORT` variable in the format
+`http://<ip>:<port>`. Application `App/web.py`
+processes this value in `<port>` format.
 
-Второе изменение связано с тем, что в режиме `Deployment` в сконтейнер
-`web` экпортируется переменная `REDIS_PORT` в формате
-`http://<ip>:<port>`. Приложение `App/web.py`
-обрабатывает это значение в формате `<port>`.
+To start the service stack, type the command:
+```
+podman-compose --in-pod counter -p counter up -d
+```
+*When using `podman-compose` version `>= 1.0.7` parameter `--in-pod` is optional.*
 
-Для запуска стека сервисов наберите команду:
+The `-p` parameter specifies the project name - the name suffix of `POD`
+(`pod_counter`) and a prefix for container and volume names. If the `-p` option
+missing, the name of the current directory is accepted as the project name
+(in our case `hello-python`).
 
-    podman-compose --in-pod counter -p counter up -d
+When running, `podman-compose` displays a list of commands to run:
+```
+...
+podman volume inspect counter_redis || podman volume create counter_redis
+...
+podman pod create --name=pod_counter --infra=false --share=
+...
+podman run --name=counter_redis_1 -d --pod=pod_counter --read-only --label ...
+...
+podman run --name=counter_web_1 -d --pod=pod_counter --read-only --label ...
+...
+```
+After deployment the POD and containers, the status can be viewed using commands:
 
-*При использовании `podman-compose` версии `>= 1.0.7` параметр
-`--in-pod` необязателен.*
+- list of running PODs:
+```
+podman pod ls
 
-Параметр `-p` задает имя проекта - суффикс имени `POD`\'а
-(`pod_counter`) и префикс имен контейнеров и томов. Если параметр `-p`
-отсутствует в качестве имени проекта принимается имя текущего каталога
-(в нашем случае `hello-python`).
+POD ID        NAME         STATUS      CREATED        INFRA ID    # OF CONTAINERS
+d37ba3addeb3  pod_counter  Running     9 minutes ago              2
+```
+- POD container logs:
+```
+podman pod logs pod_counter
 
-В процессе работы `podman-compose` выводит список запускаемых команд:
+b5bdc8d1977f 1:C 18 Jan 2024 11:04:20.309 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+...
+b5bdc8d1977f 1:M 18 Jan 2024 11:04:20.312 * Ready to accept connections tcp
+```
 
-    ...
-    podman volume inspect counter_redis || podman volume create counter_redis
-    ...
-    podman pod create --name=pod_counter --infra=false --share=
-    ...
-    podman run --name=counter_redis_1 -d --pod=pod_counter --read-only --label ...
-    ...
-    podman run --name=counter_web_1 -d --pod=pod_counter --read-only --label ...
-    ...
+- List of running containers:
+```
+podman ps
 
-После запуска POD\'а и контейнеров состояние можно посмотреть командами.
-- список запущенных POD\'ов:
-<pre>
-    podman pod ls
+CONTAINER ID  IMAGE                             COMMAND               CREATED         STATUS         PORTS                   NAMES
+...
+b5bdc8d1977f  docker.io/library/redis:alpine    redis-server --ap...  27 minutes ago  Up 27 minutes                          counter_redis_1
+49f6f5141b24  localhost/hello-py-aioweb:latest  python -m App.web     27 minutes ago  Up 27 minutes  0.0.0.0:8080->8080/tcp  counter_web_1
+...
+```
 
-    POD ID        NAME         STATUS      CREATED        INFRA ID    # OF CONTAINERS
-    d37ba3addeb3  pod_counter  Running     9 minutes ago              2
-</pre>
--   Логи контейнеров POD\'а:
+- Redis database container logs
+```
+podman logs counter_redis_1
 
-<pre>
-    podman pod logs pod_counter
+1:C 18 Jan 2024 11:04:20.309 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+...
+1:M 18 Jan 2024 11:04:20.312 * Ready to accept connections tcp
+```
 
-    b5bdc8d1977f 1:C 18 Jan 2024 11:04:20.309 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
-    ...
-    b5bdc8d1977f 1:M 18 Jan 2024 11:04:20.312 * Ready to accept connections tcp
-</pre>
--   Список запущенных контейнеров:
+- Web WEB interface container logs:
+```
+podman log counter_web_1
+```
 
-<pre>
-    podman ps
+#### Checking the operation of the service stack
 
-    CONTAINER ID  IMAGE                             COMMAND               CREATED         STATUS         PORTS                   NAMES
-    ...
-    b5bdc8d1977f  docker.io/library/redis:alpine    redis-server --ap...  27 minutes ago  Up 27 minutes                          counter_redis_1
-    49f6f5141b24  localhost/hello-py-aioweb:latest  python -m App.web     27 minutes ago  Up 27 minutes  0.0.0.0:8080->8080/tcp  counter_web_1
-    ...
-</pre>
+To check the operation of the stack, send requests sequentially with the `curl` command
+to port `8080`:
+```
+# curl localhost:8080/
+counter=1
+# curl localhost:8080/
+counter=2
+# curl localhost:8080/
+counter=3
+...
+```
 
--   Логи контейнера базы данных redis
+## Exporting a running POD to kubernetes manifests and deployment them
 
-`<pre>
-    podman logs counter_redis_1
+### Deployment as a kubernetes POD
 
-    1:C 18 Jan 2024 11:04:20.309 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
-    ...
-    1:M 18 Jan 2024 11:04:20.312 * Ready to accept connections tcp
-</pre>
--   Логи контейнера WEB-интерфейса web:
+Manifests are generated using the `podman-compose-to-kube` command.
+Format:
+```
+podman-compose-to-kube \
+  [--type(-t) <deployment type>]\
+  [--namespace(-n) <namespace>]
+  [--dir(-d) <manifests_directory>]\
+  [--pvpath <PersistentVolume_directory>] \
+  [--user <rootless_user>]\
+  [--group <rootless_group>]\
+  [--output(-o) [yml|json]]\
+  [--verbose(-v)]\
+  <POD_name>\
+  <docker-compose_file_name>
+```
 
-<pre>
-    podman log counter_web_1
-</pre>
-##### Проверка работы стека сервисов 
+#### Manifest generation
 
-Для проверки работы стека последовательно пошлите запросы командой curl
-на порт 8080:
-
-    # curl localhost:8080/
-    counter=1
-    # curl localhost:8080/
-    counter=2
-    # curl localhost:8080/
-    counter=3
-    ...
-
-### Экспорт запущенного POD\'а в kubernetes-манифесты и их запуск 
-
-#### Разворачивание в виде kubernetes POD 
-
-Генерация манифестов производится командой `podman-compose-to-kube`.
-Формат ее вызова:
-
-    podman-compose-to-kube \
-      [--type(-t) &lt;deployment type>]\
-      [--namespace(-n) &lt;namespace>]
-      [--dir(-d) &lt;manifests_directory>]\
-      [--pvpath &lt;PersistentVolume_directory>] \
-      [--user &lt;rootless_user>]\
-      [--group &lt;rootless_group>]\
-      [--output(-o) [yml|json]]\
-      [--verbose(-v)]\
-      &lt;POD_name>\
-      &lt;docker-compose_file_name>
-
-###### Генерация манифестов 
-
-Генерация манифестов для POD-разворачивания производится командой:
-<pre>
+Generating manifests for POD deployment is done with the command:
+```
 podman-compose-to-kube -v pod_counter docker-compose.yaml
-</pre>
-<pre>
+```
+```
 Generate a POD manifest based on the specified POD
 Replace symbols _ to - in yml elements ending with name(Name)
 Generate list of services in docker-compose file
@@ -274,61 +253,353 @@ Generate PersistentVolumeClaims and PersistentVolumes:
         /mnt/PersistentVolumes/default/counter-redis
 Generate a deploy file manifests/default/counter/Pod/counter.yml of the Pod type:
 Generate a service file manifests/default/counter/Pod/Service/counter.yml of the Pod type
-</pre>
+```
 
-*Если в выводе шагов генерации нет необходимости флаг `--v` можно
-опустить.*
+*If there is no need to output generation steps, the `-v` flag can be omitted.*
 
-Первый параметр `pod_counter` указывает имя поднятого `podman-POD`\'а.
-Второй `docker-compose.yaml` - имя YAML-файла из которого поднят
-контейнер.
+The first parameter `pod_counter` specifies the name of the raised `podman-POD`.
+The second `docker-compose.yaml` is the name of the YAML file from which it is started
+containers.
 
-После вызова команды в текущем каталоге создастся подкаталог `manifests`
-следующей структуры:
+After calling the command, a subdirectory `manifests` will be created in the current directory with
+following structure:
+```
+manifests/
+└── default
+    └── counter
+        └── Pod
+            ├── counter.yml
+            ├── Service
+            │   └── counter.yml
+            ├── PersistentVolumeClaim
+            │   └── counter-redis.yml
+            └── PersistentVolume
+                └── default-counter-redis.yml
+```
+At the first level, a directory `default` will be created whose name specifies
+`kubernetes-namespace` in which `POD` will be launched.
 
-     manifests/
-    └── default
-        └── counter
-            └── Pod
-                ├── counter.yml
-                ├── Service
-                │   └── counter.yml
-                ├── PersistentVolumeClaim
-                │   └── counter-redis.yml
-                └── PersistentVolume
-                    └── default-counter-redis.yml
+In the `default` subdirectory, a `counter` subdirectory is created whose name is
+is taken from the name of the generated `POD` by discarding the `pod_` prefix.
 
-На первом уровне создастся каталог `default` имя которого задает
-`kubernetes-namespace` в котором будет запускаться `POD`.
-
-В подкаталоге `default` создается подкаталог `counter` имя которого
-берется из имени генерируемого `POD`\'а отбрасыванием префикса `pod_`.
-
-В подкаталоге `counter` создается подкаталог по имени разворачивания -
+In the `counter` subdirectory, a subdirectory is created by the name of the expansion -
 `Pod`.
 
-В каталоге типа разворачивания `Pod` генерируются:
+In the deployment type directory `Pod` the following are generated:
 
--   файл описания Pod-контейнера `counter.yml`;
--   подкаталог описания kubernet-сервиса `Service`
--   подкаталог `PersistentVolumeClaim` описания kubernet-запроса на
-    монтируемые тома
--   подкаталог `PersistentVolume` описания томов для данного
-    разворачивания.
+- Pod container description file `counter.yml`;
+- subdirectory of the description of the kubernet service `Service`
+- subdirectory `PersistentVolumeClaim` description of the kubernet request for
+     mounted volumes
+- subdirectory `PersistentVolume` description of volumes for a given
+     deployment.
 
-**Файл описания Pod-контейнера counter.yml**
+##### Pod container description file counter.yml
 
-Файл описания Pod-контейнера `counter.yml` выглядит следующим образом:
+The Pod container description file `counter.yml` looks like this:
+```
+# Created with podman-compose-to-kube 1.0.0-alt1
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: '2024-01-27T11:05:26Z'
+  labels:
+    app: counter
+  name: counter
+  namespace: default
+spec:
+  containers:
+    - args:
+        - redis-server
+        - --appendonly
+        - 'yes'
+        - --notify-keyspace-events
+        - Ex
+      image: docker.io/library/redis:alpine
+      name: counterredis1
+      ports:
+        - containerPort: 6379
+      securityContext:
+        readOnlyRootFilesystem: true
+      volumeMounts:
+        - mountPath: /data
+          name: counter-redis-pvc
+    - env:
+        - name: REDIS_HOST
+          value: redis
+        - name: REDIS_PORT
+          value: '6379'
+      image: localhost/hello-py-aioweb:latest
+      name: counterweb1
+      ports:
+        - containerPort: 8080
+      securityContext:
+        readOnlyRootFilesystem: true
+  volumes:
+    - name: counter-redis-pvc
+      persistentVolumeClaim:
+        claimName: counter-redis
+  hostAliases:
+    - ip: 127.0.0.1
+      hostnames:
+        - redis
+        - web
+```
 
-    # Created with podman-compose-to-kube 1.0.0-alt1
-    apiVersion: v1
-    kind: Pod
+The file describes in `namespace: default` in a POD named `counter` two
+container: `counterredis1`, `counterweb1`.
+
+The container `counterredis1` accepts requests on port `6379` and mounts
+the `/data` directory on the volume obtained by request (`PersisnentVolumeClaim`)
+with name (`claimName`) `counter-redis`.
+
+The `counterweb1` container accepts requests on port `8080`. On his environment
+two variables are exported: `REDIS_HOST` and `REDIS_PORT`.
+
+Since in a `POD` type deployment both containers start in the same
+`POD` with local address `127.0.0.1` is added to the YML file
+description of `hostAliases`, binding short DNS names `web`, `redis`
+to local address `127.0.0.1`. Thus the `redis` container
+accessible from the `web` container under the name `redis` via local
+interface `lo` `POD`.
+
+##### Subdirectory for the description of the kubernet service Service
+
+Since only one `POD` subdirectory is launched as part of the deployment
+descriptions of the kubernet service `Service` contains only one file
+`counter.yml`:
+```
+# Created with podman-compose-to-kube 1.0.0-alt1
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: '2024-01-27T11:05:26Z'
+  labels:
+    app: counter
+  name: counter
+  namespace: default
+spec:
+  ports:
+    - name: '6379'
+      nodePort: 32717
+      port: 6379
+      targetPort: 6379
+    - name: '8080'
+      nodePort: 31703
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: counter
+  type: NodePort
+```
+
+The file describes for a `POD` named `counter` in `namespace: default`
+two ports for external access:
+
+- `6379` - with a node port for external access `32717`;
+- `8080` - with a node port for external access `31703`.
+
+If external access to the container `counterredis1` does not require a description
+port `6379` can be removed.
+
+##### Subdirectory PersistentVolumeClaim description of the kubernet request for mounted volumes
+
+`docker-compose` YML file contains a description of only one outer volume
+for the `redis` service. This description generates an allocation request
+volumes contained in the `counter-redis.yml` file:
+```
+# Created with podman-compose-to-kube 1.0.6-alt1
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    volume.podman.io/driver: local
+  creationTimestamp: '2024-01-27T11:05:27Z'
+  name: counter-redis
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: manual
+```
+File for request `counter-redis` in `namespace:default` requests volume
+volume `1Gi`.
+
+##### Subdirectory `PersistentVolume` description of volumes for this deployment
+
+For each request for a volume in the `PersistentVolume` directory, a
+description of the volume on the host's local disk. File `default-counter-redis.yml`
+contains the following information:
+```
+# Created with podman-compose-to-kube 1.0.6-alt1
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: default-counter-redis
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  claimRef:
+    name: counter-redis
+    namespace: default
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /mnt/PersistentVolumes/default/counter-redis
+```
+For a request (`claimRef`) named `counter-redis` in the directory
+`/mnt/PersistentVolumes/default/counter-redis` is allocated `1Gi`
+disk space. Volume root directory name
+`/mnt/PersistentVolumes/` can be changed by specifying a different directory in
+parameter `--pvpath`.
+
+#### Running POD manifests
+
+`POD manifests` are launched with the command:
+```
+kubectl apply -R -f manifests/default/counter/Pod/
+
+persistentvolume/default-counter-redis created
+persistentvolumeclaim/counter-redis created
+service/counter created
+pod/counter created
+```
+Command recursively execute all YML files of a directory
+`manifests/default/counter/Pod/`.
+
+The state of the container and service can be viewed with the command:
+```
+kubectl -n default get all -o wide
+
+NAME            READY   STATUS    RESTARTS      AGE     IP            NODE     NOMINATED NODE   READINESS GATES
+pod/counter     2/2     Running   0             22m     10.88.0.99    host-8   <none>           <none>
+
+NAME                 TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)                         AGE   SELECTOR
+service/counter      NodePort    10.108.81.8   <none>        6379:30031/TCP,8080:30748/TCP   22m   app=counter
+```
+Check the outer volume assignment:
+```
+kubectl -n default get pvc
+
+NAME            STATUS   VOLUME                  CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+counter-redis   Bound    default-counter-redis   1Gi        RWO            manual         46s
+```
+
+##### Checking POD Operation
+
+To check the operation of the POD, run the container from the image
+`praqma/network-multitool`:
+```
+kubectl run multitool --image=praqma/network-multitool
+
+pod/multitool created
+```
+
+Make a request to the `counter.default` service from the container:
+```
+kubectl exec -it pod/multitool -- curl http://counter.default:8080
+
+counter=1
+```
+Operation can also be checked by accessing the external port of the node, on
+which `POD` is running:
+
+```
+curl http://<IP>:30748
+
+counter=2
+```
+
+#### Stopping POD manifests
+
+To stop the POD, type the command:
+```
+kubectl delete -R -f manifests/default/counter/Pod/
+
+persistentvolume "default-counter-redis" deleted
+persistentvolumeclaim "counter-redis" deleted
+service "counter" deleted
+pod "counter" deleted
+```
+
+### Deployment as kubernetes Deployment
+
+#### Manifest generation
+
+Manifests for Deployment deployment are generated by
+command:
+```
+podman-compose-to-kube -t d -v pod_counter docker-compose.yaml
+```
+
+*If the output of generation steps is not necessary, the `-v` flag can be omitted.*
+
+The format for calling the command to generate Deployment deployment is different
+the presence of the `-t d` flag (`--type=deployment`).
+```
+Generate a POD manifest based on the specified POD
+Replace symbols _ to - in yml elements ending with name(Name)
+Generate list of services in docker-compose file
+Get descriptions of the environment variables
+Generate common POD file
+Generate PersistentVolumeClaims and PersistentVolumes:
+        t/default/counter/Pod/PersistentVolumeClaim/counter-redis.yml
+        t/default/counter/Pod/PersistentVolume/default-counter-redis.yml
+        /mnt/PersistentVolumes/default/counter-redis
+Generate a deploy file t/default/counter/Pod/counter.yml of the Pod type:
+Generate a service file t/default/counter/Pod/Service/counter.yml of the Pod type
+```
+
+After calling the command, a subdirectory `manifests` will be created in the current directory
+following structure:
+```
+manifests/
+└── default
+    └── counter
+        └── Deployment
+            ├── redis.yml
+            ├── web.yml
+            ├── Service
+            │   ├── redis.yml
+            │   └── web.yml
+            ├── PersistentVolumeClaim
+            │   └── counter-redis.yml
+            └── PersistentVolume
+                └── default-counter-redis.yml
+```
+
+##### Description files for the Deployment solution redis.yml, web.yml
+
+Deployment solution description files are placed in the `Deployment` subdirectory
+`counter` directory. Since during Deployment deployment each
+the container can be replicated, they are placed in different Deployment's,
+described in the YML files `redis.yml`, `web.yml`.
+
+Deploying the `redis` service, file `redis.yml`:
+```
+# Created with podman-compose-to-kube 1.0.6-alt1
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    app: redis
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
     metadata:
-      creationTimestamp: '2024-01-27T11:05:26Z'
       labels:
-        app: counter
-      name: counter
-      namespace: default
+        app: redis
     spec:
       containers:
         - args:
@@ -346,6 +617,39 @@ Generate a service file manifests/default/counter/Pod/Service/counter.yml of the
           volumeMounts:
             - mountPath: /data
               name: counter-redis-pvc
+      volumes:
+        - name: counter-redis-pvc
+          persistentVolumeClaim:
+            claimName: counter-redis
+```
+
+The container description in the `spec.template.spec` element matches
+description in POD mode in the zero element `spec`, like the element
+descriptions of the external volume `spec.template.volumes`. Since the container
+has an external volume mounted in read-write mode this
+container cannot replicate: `spec.replicas: 1`.
+
+Deploying the `web` service, file `web.yml`:
+```
+# Created with podman-compose-to-kube 1.0.6-alt1
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels:
+    app: web
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
         - env:
             - name: REDIS_HOST
               value: redis
@@ -357,533 +661,228 @@ Generate a service file manifests/default/counter/Pod/Service/counter.yml of the
             - containerPort: 8080
           securityContext:
             readOnlyRootFilesystem: true
-      volumes:
-        - name: counter-redis-pvc
-          persistentVolumeClaim:
-            claimName: counter-redis
-      hostAliases:
-        - ip: 127.0.0.1
-          hostnames:
-            - redis
-            - web
-
-Файл описывает в `namespace: default` в POD\'е с именем `<counter` два
-контейнера: `counterredis1`, `counterweb1`.
-
-Контейнер `counterredis1` принимает запросы по порту `6379` и монтирует
-каталог `/data` на том, получаемый по запросу (`PersisnentVolumeClaim`)
-с именем (`claimName`) `counter-redis`.
-
-Контейнер `counterweb1` принимает запросы по порту `8080`. В его среду
-экспортируются две переменные: `REDIS_HOST` и `REDIS_PORT`.
-
-Так как в разворачивании типа `POD` оба контейнера стартуют в одном
-`POD`\'е с локальным адресом `127.0.0.1`, к YML-файлу добавляется
-описание `hostAliases`, привязывающий короткие DNS-имена `web`, `redis`
-к локальному адресу `127.0.0.1`. Таким образом контейнер `redis`
-доступен из контейнера `web` под именем `redis` через локальный
-интерфейс `lo` `POD`\'а.
-
-**Подкаталог описания kubernet-сервиса `Service`**
-
-Так как в рамках разворачивания запускается всего один `POD` подкаталог
-описания kubernet-сервиса `Service` содержит всего один файл
-`counter.yml`:
-
-    # Created with podman-compose-to-kube 1.0.0-alt1
-    apiVersion: v1
-    kind: Service
-    metadata:
-      creationTimestamp: '2024-01-27T11:05:26Z'
-      labels:
-        app: counter
-      name: counter
-      namespace: default
-    spec:
-      ports:
-        - name: '6379'
-          nodePort: 32717
-          port: 6379
-          targetPort: 6379
-        - name: '8080'
-          nodePort: 31703
-          port: 8080
-          targetPort: 8080
-      selector:
-        app: counter
-      type: NodePort
-
-Файл описывает для `POD`\'а с именем `counter` в `namespace: default`
-два порта для внешнего доступа:
-
--   `6379` - с node-портом для внешнего доступа `32717`;
--   `8080` - с node-портом для внешнего доступа `31703`.
-
-Если внешний доступ к контейнеру `counterredis1` не требуется описание
-порта `6379` можно удалить.
-
-**Подкаталог `PersistentVolumeClaim` описания kubernet-запроса на
-монтируемые тома**
-
-docker-compose YML файл содержит описание только одного внешнего тома
-для сервиса `redis`. Данное описание генерирует запрос на выделение
-тома, содержащееся в файле `counter-redis.yml`:
-
-    # Created with podman-compose-to-kube 1.0.6-alt1
-    apiVersion: v1
-    kind: PersistentVolumeClaim
-    metadata:
-      annotations:
-        volume.podman.io/driver: local
-      creationTimestamp: '2024-01-27T11:05:27Z'
-      name: counter-redis
-      namespace: default
-    spec:
-      accessModes:
-        - ReadWriteOnce
-      resources:
-        requests:
-          storage: 1Gi
-      storageClassName: manual
-
-Файл для запроса `counter-redis` в `namespace: default` запрашивает том
-объемом `1Gi`.
-
-**Подкаталог `PersistentVolume` описания томов для данного
-разворачивания**
-
-Для каждого запроса на том в каталоге `PersistentVolume` формируется
-описание тома на локальном диске узла. Файл `default-counter-redis.yml`
-содержит следующую информацию:
-
-    # Created with podman-compose-to-kube 1.0.6-alt1
-    apiVersion: v1
-    kind: PersistentVolume
-    metadata:
-      name: default-counter-redis
-      labels:
-        type: local
-    spec:
-      storageClassName: manual
-      claimRef:
-        name: counter-redis
-        namespace: default
-      capacity:
-        storage: 1Gi
-      accessModes:
-        - ReadWriteOnce
-      hostPath:
-        path: /mnt/PersistentVolumes/default/counter-redis
-
-Для запроса (`claimRef`) с именем `counter-redis` в каталоге
-`/mnt/PersistentVolumes/default/counter-redis` выделяется `1Gi`
-дискового пространства. Имя корневого каталог томов
-`/mnt/PersistentVolumes/` можно изменить указав друглй каталог в
-параметре `--pvpath`.
-
-###### Запуск манифестов POD\'а 
-
-Запуск `POD-манифестов` производится командой:
-
-    kubectl apply -R -f manifests/default/counter/Pod/
-
-    persistentvolume/default-counter-redis created
-    persistentvolumeclaim/counter-redis created
-    service/counter created
-    pod/counter created
-
-Команда рекурсивно выполнить все YML-файлы каталога
-`manifests/default/counter/Pod/`.
-
-Состояние контейнера и сервиса можно посмотреть командой
-
-    kubectl -n default get all -o wide
-
-    NAME            READY   STATUS    RESTARTS      AGE     IP            NODE     NOMINATED NODE   READINESS GATES
-    pod/counter     2/2     Running   0             22m     10.88.0.99    host-8   <none>           <none>
-
-    NAME                 TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)                         AGE   SELECTOR
-    service/counter      NodePort    10.108.81.8   <none>        6379:30031/TCP,8080:30748/TCP   22m   app=counter
-
-Проверьте назначение внешнего тома:
-
-    kubectl -n default get pvc
-
-    NAME            STATUS   VOLUME                  CAPACITY   ACCESS MODES   STORAGECLASS   AGE
-    counter-redis   Bound    default-counter-redis   1Gi        RWO            manual         46s
-
-###### Проверка работы POD\'а 
-
-Для проверки работы POD\'а запустите контейнер от образа
-`praqma/network-multitool`:
-
-    kubectl run multitool --image=praqma/network-multitool
-
-    pod/multitool created
-
-Сделайте запрос на сервис `counter.default` из конейнера:
-
-    kubectl exec -it pod/multitool -- curl http://counter.default:8080
-
-    counter=1
-
-Работу можно проверить также обратившись к внешнему порту узла, на
-котором запущен `POD`:
-
-    curl http://&lt;IP>:30748
-
-    counter=2
-
-##### Останов манифестов POD\'а 
-
-Для остановки работы POD\'а набеоите команду:
-
-    kubectl delete -R -f manifests/default/counter/Pod/
-
-    persistentvolume "default-counter-redis" deleted
-    persistentvolumeclaim "counter-redis" deleted
-    service "counter" deleted
-    pod "counter" deleted
-
-#### Разворачивание в виде kubernetes Deployment 
-
-###### Генерация манифестов 
-
-Генерация манифестов для Deployment-разворачивания производится
-командой:
-<pre>
-podman-compose-to-kube -t d -v pod_counter docker-compose.yaml
-</pre>
-
-*Если в выводе шагов генерации нет необходимости флаг `-v` можно
-опустить.*
-
-Формат вызова команды для генерации Deployment-разворачивания отличается
-наличием флага `-t d` (`--type=deployment`).
-<pre>
-Generate a POD manifest based on the specified POD
-Replace symbols _ to - in yml elements ending with name(Name)
-Generate list of services in docker-compose file
-Get descriptions of the environment variables
-Generate common POD file
-Generate PersistentVolumeClaims and PersistentVolumes:
-        t/default/counter/Pod/PersistentVolumeClaim/counter-redis.yml
-        t/default/counter/Pod/PersistentVolume/default-counter-redis.yml
-        /mnt/PersistentVolumes/default/counter-redis
-Generate a deploy file t/default/counter/Pod/counter.yml of the Pod type:
-Generate a service file t/default/counter/Pod/Service/counter.yml of the Pod type
-</pre>
-
-После вызова команды в текущем каталоге создастся подкаталог `manifests`
-следующей структуры:
-
-    manifests/
-    └── default
-        └── counter
-            └── Deployment
-                ├── redis.yml
-                ├── web.yml
-                ├── Service
-                │   ├── redis.yml
-                │   └── web.yml
-                ├── PersistentVolumeClaim
-                │   └── counter-redis.yml
-                └── PersistentVolume
-                    └── default-counter-redis.yml
-
-**Файлы описания Deployment-решения redis.yml, web.yml**
-
-Файлы описания Deployment-решения помещаются в подкаталог `Deployment`
-каталога POD\'а `counter`. Так как при Deployment-разворачивании каждый
-контейнер может реплицироваться они помещаются в разные Deployment\'s,
-описываемые в YML-файлах `redis.yml`, `web.yml`.
-
-Разворачивание сервиса `redis`, файл `redis.yml`:
-
-    # Created with podman-compose-to-kube 1.0.6-alt1
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: redis
-      labels:
-        app: redis
-      namespace: default
-    spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          app: redis
-      template:
-        metadata:
-          labels:
-            app: redis
-        spec:
-          containers:
-            - args:
-                - redis-server
-                - --appendonly
-                - 'yes'
-                - --notify-keyspace-events
-                - Ex
-              image: docker.io/library/redis:alpine
-              name: counterredis1
-              ports:
-                - containerPort: 6379
-              securityContext:
-                readOnlyRootFilesystem: true
-              volumeMounts:
-                - mountPath: /data
-                  name: counter-redis-pvc
-          volumes:
-            - name: counter-redis-pvc
-              persistentVolumeClaim:
-                claimName: counter-redis
-
-Описание контейнера в элементе `spec.template.spec` совпадает с
-описанием в режиме POD\'а в нулевом элементе `spec`, как и элемент
-описания внешнего тома `code>spec.template.volumes`. Так как контейнер
-имеет внешний том, примонтированный в режиме чтения-записи этот
-контейнер не может реплицироваться `spec.replicas: 1`.
-
-Разворачивание сервиса `web`, файл `web.yml`:
-
-    # Created with podman-compose-to-kube 1.0.6-alt1
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: web
-      labels:
-        app: web
-      namespace: default
-    spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          app: web
-      template:
-        metadata:
-          labels:
-            app: web
-        spec:
-          containers:
-            - env:
-                - name: REDIS_HOST
-                  value: redis
-                - name: REDIS_PORT
-                  value: '6379'
-              image: localhost/hello-py-aioweb:latest
-              name: counterweb1
-              ports:
-                - containerPort: 8080
-              securityContext:
-                readOnlyRootFilesystem: true
-
-Как и для сервиса `redis` в сервисе `web` описание контейнера в элементе
-`spec.template.spec` совпадает с описанием в режиме POD\'а в первом
-элементе `spec`. Так как контейнер не имеет внешних томов этот контейнер
-может реплицироваться до требуемых значений. Можно перед запуском
-установить нужное число реплик в элементе `spec.replicas`.
-
-**Подкаталог описания kubernet-сервиса `Service`**
-
-Так как при Deployment-разворачивания контейнеры разворачиваются в
-отдельных POD\'ах и оба имеют порты, то для каждого из них генерируются
-отдельный файл описания сервисов `Service/redis.yml`, `Service/web.yml`.
-
-Файл `redis.yml` описания сервиса `redis`:
-
-    # Created with podman-compose-to-kube 1.0.6-alt1
-    apiVersion: v1
-    kind: Service
-    metadata:
-      creationTimestamp: '2024-01-27T16:04:24Z'
-      labels:
-        app: redis
-      name: redis
-      namespace: default
-    spec:
-      ports:
-        - name: '6379'
-          nodePort: 30921
-          port: 6379
-          targetPort: 6379
-      selector:
-        app: redis
-      type: NodePort
-
-Если к сервису `Service/web.yml` не необходимости обращении извне
-елемент `spec.ports[0].nodePort` можно удалить.
-
-Файл `web.yml` описания сервиса `web`:
-
-    # Created with podman-compose-to-kube 1.0.6-alt1
-    apiVersion: v1
-    kind: Service
-    metadata:
-      creationTimestamp: '2024-01-27T16:04:24Z'
-      labels:
-        app: web
-      name: web
-      namespace: default
-    spec:
-      ports:
-        - name: '8080'
-          nodePort: 31434
-          port: 8080
-          targetPort: 8080
-      selector:
-        app: web
-      type: NodePort
-
-**Подкаталоги `PersistentVolumeClaim`, `PersistentVolume`** Структура и
-содержание подкаталогов `PersistentVolumeClaim`, `PersistentVolume`
-разворачивания `Deployment` совпадает с разворачиванием `Pod`, описанное
-выше.
-
-###### Запуск манифестов
-
-Запуск `Deployment-манифестов` производится командой:
-
-    kubectl apply -R -f manifests/default/counter/Deployment/
-
-    persistentvolume/default-counter-redis created
-    persistentvolumeclaim/counter-redis created
-    service/redis created
-    service/web created
-    deployment.apps/redis created
-    deployment.apps/web created
-
-Команда рекурсивно выполнить все YML-файлы каталога
+```
+As for the `redis` service in the `web` service, the description of the container in the element
+`spec.template.spec` matches the description in POD mode in the first
+element `spec`. Since the container does not have external volumes, this container
+can be replicated to required values. 
+The required number of replicas is specified in the `spec.replicas` element.
+
+##### Subdirectory for the description of the kubernet service `Service`
+
+Since during Deployment mode the containers are deployed in
+separate POD's and both have ports, then for each of them are generated
+separate service description files `Service/redis.yml`, `Service/web.yml`.
+
+File `redis.yml` describe the `redis` service:
+```
+# Created with podman-compose-to-kube 1.0.6-alt1
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: '2024-01-27T16:04:24Z'
+  labels:
+    app: redis
+  name: redis
+  namespace: default
+spec:
+  ports:
+    - name: '6379'
+      nodePort: 30921
+      port: 6379
+      targetPort: 6379
+  selector:
+    app: redis
+  type: NodePort
+```
+
+If the service `Service/web.yml` does not need to be accessed from outside
+the `spec.ports[0].nodePort` element can be removed.
+
+File `web.yml` describe the `web` service:
+```
+# Created with podman-compose-to-kube 1.0.6-alt1
+apiVersion: v1
+kind: Service
+metadata:
+  creationTimestamp: '2024-01-27T16:04:24Z'
+  labels:
+    app: web
+  name: web
+  namespace: default
+spec:
+  ports:
+    - name: '8080'
+      nodePort: 31434
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: web
+  type: NodePort
+```
+
+##### Subdirectories PersistentVolumeClaim, PersistentVolume
+
+Structure and contents of subdirectories `PersistentVolumeClaim`, `PersistentVolume`
+The `Deployment` deployment is the same as the `Pod` deployment described
+above&deg;&deg;&deg;.
+
+#### Running deployment manifests
+
+The `Deployment manifests` are launched with the command:
+```
+kubectl apply -R -f manifests/default/counter/Deployment/
+
+persistentvolume/default-counter-redis created
+persistentvolumeclaim/counter-redis created
+service/redis created
+service/web created
+deployment.apps/redis created
+deployment.apps/web created
+```
+
+The command will recursively execute all YML files of the directory
 `manifests/default/counter/Deployment/`.
 
-При необходимости Вы можете реплицировать (например в количестве 3)
-Deployment web командой:
+If necessary, you can replicate (for example, in the amount of 3)
+Deployment web command:
+```
+kubectl scale --replicas=3 deployment web
+```
 
-    kubectl scale --replicas=3 deployment web
+The state of containers and services can be viewed with the command:
+```
+kubectl -n default get all -o wide
 
-Состояние контейнера и сервиса можно посмотреть командой
+NAME                         READY   STATUS    RESTARTS      AGE     IP            NODE     NOMINATED NODE   READINESS GATES
+pod/redis-7595cd897c-894dd   1/1     Running   0             3m46s   10.88.0.103   host-8   <none>           <none>
+pod/web-5778c5c-b8gcw        1/1     Running   0             3m46s   10.88.0.102   host-8   <none>           <none>
+pod/web-5778c5c-h7bjh        1/1     Running   0             7s      10.88.0.104   host-8   <none>           <none>
+pod/web-5778c5c-nqxhs        1/1     Running   0             7s      10.88.0.105   host-8   <none>           <none>
 
-    kubectl -n default get all -o wide
+NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE     SELECTOR
+service/redis        NodePort    10.110.219.99   <none>        6379:30921/TCP   3m46s   app=redis
+service/web          NodePort    10.103.86.45    <none>        8080:31434/TCP   3m46s   app=web
 
-    NAME                         READY   STATUS    RESTARTS      AGE     IP            NODE     NOMINATED NODE   READINESS GATES
-    pod/redis-7595cd897c-894dd   1/1     Running   0             3m46s   10.88.0.103   host-8   <none>           <none>
-    pod/web-5778c5c-b8gcw        1/1     Running   0             3m46s   10.88.0.102   host-8   <none>           <none>
-    pod/web-5778c5c-h7bjh        1/1     Running   0             7s      10.88.0.104   host-8   <none>           <none>
-    pod/web-5778c5c-nqxhs        1/1     Running   0             7s      10.88.0.105   host-8   <none>           <none>
+NAME                    READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS      IMAGES                             SELECTOR
+deployment.apps/redis   1/1     1            1           3m46s   counterredis1   docker.io/library/redis:alpine     app=redis
+deployment.apps/web     3/3     3            3           3m46s   counterweb1     localhost/hello-py-aioweb:latest   app=web
 
-    NAME                 TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE     SELECTOR
-    service/redis        NodePort    10.110.219.99   <none>        6379:30921/TCP   3m46s   app=redis
-    service/web          NodePort    10.103.86.45    <none>        8080:31434/TCP   3m46s   app=web
+NAME                               DESIRED   CURRENT   READY   AGE     CONTAINERS      IMAGES                             SELECTOR
+replicaset.apps/redis-7595cd897c   1         1         1       3m46s   counterredis1   docker.io/library/redis:alpine     app=redis,pod-template-hash=7595cd897c
+replicaset.apps/web-5778c5c        3         3         3       3m46s   counterweb1     localhost/hello-py-aioweb:latest   app=web,pod-template-hash=5778c5c
+```
 
-    NAME                    READY   UP-TO-DATE   AVAILABLE   AGE     CONTAINERS      IMAGES                             SELECTOR
-    deployment.apps/redis   1/1     1            1           3m46s   counterredis1   docker.io/library/redis:alpine     app=redis
-    deployment.apps/web     3/3     3            3           3m46s   counterweb1     localhost/hello-py-aioweb:latest   app=web
+Check the outer volume assignment:
+```
+kubectl -n default get pvc
 
-    NAME                               DESIRED   CURRENT   READY   AGE     CONTAINERS      IMAGES                             SELECTOR
-    replicaset.apps/redis-7595cd897c   1         1         1       3m46s   counterredis1   docker.io/library/redis:alpine     app=redis,pod-template-hash=7595cd897c
-    replicaset.apps/web-5778c5c        3         3         3       3m46s   counterweb1     localhost/hello-py-aioweb:latest   app=web,pod-template-hash=5778c5c
+NAME            STATUS   VOLUME                  CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+counter-redis   Bound    default-counter-redis   1Gi        RWO            manual         46s
+```
 
-Проверьте назначение внешнего тома:
+#### Checking the Deploymant's operation
 
-    kubectl -n default get pvc
+To check the operation of the POD, run (if you have not done so before)
+container from the `praqma/network-multitool` image:
+```
+kubectl run multitool --image=praqma/network-multitool
 
-    NAME            STATUS   VOLUME                  CAPACITY   ACCESS MODES   STORAGECLASS   AGE
-    counter-redis   Bound    default-counter-redis   1Gi        RWO            manual         46s
+pod/multitool created
+```
+Make a request to the `web.default` service from the container:
+```
+kubectl exec -it pod/multitool -- curl http://web.default:8080
 
-##### Проверка работы Deploymant\'а 
+counter=3
+```
+*Please note that unlike deploying a Pod (domain
+`counter.default`) the domain `web.default` is being accessed.*
 
-Для проверки работы POD\'а запустите (если не сделали это ранее)
-контейнер от образа `praqma/network-multitool`:
+Operation can also be checked by accessing the external port of the node, on
+which `POD` is running:
+```
+curl http://<IP>:31434
 
-    kubectl run multitool --image=praqma/network-multitool
+counter=4
+```
 
-    pod/multitool created
+#### Stopping Deployment manifests
 
-Сделайте запрос на сервис `web.default` из конейнера:
+To stop the POD, type the command:
+```
+kubectl delete -R -f manifests/default/counter/Deployment/
 
-    kubectl exec -it pod/multitool -- curl http://web.default:8080
+persistentvolume "default-counter-redis" deleted
+persistentvolumeclaim "counter-redis" deleted
+service "redis" deleted
+service "web" deleted
+deployment.apps "redis" deleted
+deployment.apps "web" deleted
+```
 
-    counter=3
+## Features of deployment in a rootless environment
 
-*Обратите внимание, что в отличие от разворачивания Pod (домен
-`counter.default`) идет обращение к домену `web.default`.*
+> This section describes running the generated manifests in a `rootless environment`, formed as part of the [podsec] package(https://github.com/alt-cloud/podsec)
 
-Работу можно проверить также обратившись к внешнему порту узла, на
-котором запущен `POD`:
+### Specifying a username when generating manifests
 
-    curl http://&lt;IP>:31434
+When generating for rootless-kubernetes, specify when calling the command
+`podman-compose-to-kube` username flag `-u` (`--user`) name
+the user under which `kubernetes` runs (and the group name with the `-n` flag
+(`--group`) if the group name is different from the user name).
+For example, if `kubernetes` is running under the user `u7s-admin`
+the `Deployment-deployment` generation command looks like this:
+```
+podman-compose-to-kube -u u7s-admin -t d pod_counter docker-compose.yaml
+```
 
-    counter=4
+When specifying the `-u` flag for those created on the local file system
+volumes as owners are set to those specified in the parameters
+user and group.
 
-##### Останов манифестов Deployment\'а 
+### Copying local images in a rootless environment
 
-Для остановки работы POD\'а набеоите команду:
+In a rootless environment, images created by `podman-compose` are stored in
+directory `/var/lib/u7s-admin/.local/share/containers/storage/`. Images
+for kubernetes they are stored in a different directory
+`/var/lib/u7s-admin/.local/share/usernetes/containers/storage/`. For
+images downloaded from registrars is unimportant, since they
+are loaded when `POD`\' is launched. Images created locally, as in
+In our case, the image `localhost/hello-py-aioweb` needs to be transferred to
+`container-storage` for kubernetes images using the `skopeo` command:
+```
+# skopeo copy \
+  containers-storage:[/var/lib/u7s-admin/.local/share/containers/storage/]localhost/hello-py-aioweb \
+  containers-storage:[/var/lib/u7s-admin/.local/share/usernetes/containers/storage/]localhost/hello-py-aioweb
+```
+and change the owner of the transferred image from `root` to `u7s-admin`:
+```
+# chown -R u7s-admin:u7s-admin /var/lib/u7s-admin/.local/
+```
 
-    kubectl delete -R -f manifests/default/counter/Deployment/
+### Forwarding external ports on the node
 
-    persistentvolume "default-counter-redis" deleted
-    persistentvolumeclaim "counter-redis" deleted
-    service "redis" deleted
-    service "web" deleted
-    deployment.apps "redis" deleted
-    deployment.apps "web" deleted
+In `rootless mode` all created Nodeport ports remain in the namespace
+the user under which `kubernetes` is running. For port forwarding
+outside you need to go to the user's `namepspace` with the command:
+```
+machinectl shell u7s-admin@ /usr/libexec/podsec/u7s/bin/nsenter_u7s
 
-### Особенности запуска в rootless окружении
+[INFO] Entering RootlessKit namespaces: OK
+[root@host ~]#
+```
+and do port forwarding:
+```
+# rootlessctl \
+  --socket /run/user/989/usernetes/rootlesskit/api.sock
+  add-ports "0.0.0.0:30748:30748/tcp"
 
-##### Указание имени пользователя при генерации манифестов 
+10
+```
 
-При генерации для rootless-kubernetes укажите при вызове команды
-`podman-compose-to-kube` имя пользователя флагом `-u` (`--user`) имя
-пользователя под которым работает `kubernetes` (и имя группы флагом `-п`
-(`--group`), если имя группа отличается от имени пользователя).
-Например, если `kubernetes` работает под пользователем `u7s-admin`
-команда генерации `Deployment-разворачивания` выглядит так:
+Where:
 
-    podman-compose-to-kube -u u7s-admin -t d pod_counter docker-compose.yaml
+- `989` - identifier (`uid`) of the user `u7s-admin`;
 
-При указании флага `-u` для создаваемых в локальной файловой системе
-томов в качестве владельцев устанавливаются указанные в параметрах
-пользователь и группа.
-
-#### Копирование локальных образов в rootless окружении 
-
-В rootless-окружении образы, созданные `podman-compose` хранятся в
-каталоге `/var/lib/u7s-admin/.local/share/containers/storage/`. Образы
-же для kubernetes хранятся в другом каталоге
-`/var/lib/u7s-admin/.local/share/usernetes/containers/storage/`. Для
-образов, загружаемых с регистраторов это несущественно, так как они
-подгружаются при запуске `POD`\'а. Образы же, созданные локально, как в
-нашем случае образ `localhost/hello-py-aioweb` необходимо перенести в
-`container-storage` для kubernetes-образов командой `skopeo`:
-
-    # skopeo copy \
-      containers-storage:[/var/lib/u7s-admin/.local/share/containers/storage/]localhost/hello-py-aioweb \
-      containers-storage:[/var/lib/u7s-admin/.local/share/usernetes/containers/storage/]localhost/hello-py-aioweb
-
-и изменить собственника перенесенного образа с `root` на `u7s-admin`:
-
-    # chown -R u7s-admin:u7s-admin /var/lib/u7s-admin/.local/
-
-#### Проброс внешних портов на узле 
-
-В `rootless-режиме` все создаваемые Nodeport-порты остаются в namespace
-пользователя от имени которого запущен `kubernetes`. Для проброса портов
-наружу необходимо зайти в `namepspace` пользователя командой:
-
-    machinectl shell u7s-admin@ /usr/libexec/podsec/u7s/bin/nsenter_u7s
-
-    [INFO] Entering RootlessKit namespaces: OK
-    [root@host ~]#
-
-и сделать проброс портов:
-
-    # rootlessctl \
-      --socket /run/user/989/usernetes/rootlesskit/api.sock
-      add-ports "0.0.0.0:30748:30748/tcp"
-
-    10
-
-Где:
-
--   `989` - идентификатор (uid) пользователя `u7s-admin`;
--   `30748` - номер пробрасываемого порта.
+- `30748` - number of the forwarded port.
