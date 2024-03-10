@@ -1,4 +1,4 @@
-# podman-compose-to-kube - tool of migrating docker-compose solutions to kubernetes
++# podman-compose-to-kube - tool of migrating docker-compose solutions to kubernetes
 
 One of the main problems on `docker-compose` (`docker swarm`) migration
 solutions in `kubernetes` is the generation of `kubernetes-manifests` from
@@ -196,7 +196,8 @@ podman logs counter_redis_1
 1:M 18 Jan 2024 11:04:20.312 * Ready to accept connections tcp
 ```
 
-- Web WEB interface container logs:
+
+- WEB interface container logs:
 ```
 podman log counter_web_1
 ```
@@ -665,7 +666,7 @@ spec:
 As for the `redis` service in the `web` service, the description of the container in the element
 `spec.template.spec` matches the description in POD mode in the first
 element `spec`. Since the container does not have external volumes, this container
-can be replicated to required values. 
+can be replicated to required values.
 The required number of replicas is specified in the `spec.replicas` element.
 
 ##### Subdirectory for the description of the kubernet service `Service`
