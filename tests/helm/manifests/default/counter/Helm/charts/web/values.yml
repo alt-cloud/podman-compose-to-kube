@@ -1,0 +1,44 @@
+# Created with podman-compose-to-kube 1.0.0-alt1
+---
+affinity: {}
+autoscaling:
+  enabled: false
+  maxReplicas: 100
+  minReplicas: 1
+  targetCPUUtilizationPercentage: 80
+env:
+- name: REDIS_HOST
+  value: redis
+- name: REDIS_PORT
+  value: '6379'
+fullnameOverride: web
+image:
+  pullPolicy: IfNotPresent
+  repository: localhost/hello-py-aioweb
+  tag: latest
+imagePullSecrets: []
+ingress:
+  annotations: {}
+  className: ''
+  enabled: false
+  hosts:
+  - host: web.local
+    paths:
+    - path: /
+      pathType: ImplementationSpecific
+  tls: []
+nameOverride: ''
+nodeSelector: {}
+podAnnotations: {}
+podSecurityContext: {}
+replicaCount: 1
+resources: {}
+securityContext: {}
+service:
+  port: 8080
+  type: ClusterIP
+serviceAccount:
+  annotations: {}
+  create: true
+  name: web
+tolerations: []
