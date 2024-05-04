@@ -19,10 +19,10 @@ spec:
     spec:
       containers:
       - env:
-        - name: REDIS_HOST
-          value: redis
         - name: REDIS_PORT
           value: '6379'
+        - name: REDIS_HOST
+          value: redis
         image: localhost/hello-py-aioweb:latest
         name: counterweb1
         ports:
