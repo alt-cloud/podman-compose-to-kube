@@ -1,0 +1,47 @@
+# Created with podman-compose-to-kube 1.0.0-alt1
+---
+affinity: {}
+autoscaling:
+  enabled: false
+  maxReplicas: 100
+  minReplicas: 1
+  targetCPUUtilizationPercentage: 80
+fullnameOverride: redis
+image:
+  pullPolicy: IfNotPresent
+  repository: docker.io/redis
+  tag: alpine
+imagePullSecrets: []
+ingress:
+  annotations: {}
+  className: ''
+  enabled: false
+  hosts:
+  - host: redis.local
+    paths:
+    - path: /
+      pathType: ImplementationSpecific
+  tls: []
+nameOverride: ''
+nodeSelector: {}
+podAnnotations: {}
+podSecurityContext: {}
+replicaCount: 1
+resources: {}
+securityContext:
+  readOnlyRootFilesystem: true
+service:
+  port: 6379
+  type: ClusterIP
+serviceAccount:
+  annotations: {}
+  create: true
+  name: redis
+tolerations: []
+volumeMounts:
+- mountPath: /data
+  name: counter-redis-pvc
+volumes:
+- name: counter-redis-pvc
+  persistentVolumeClaim:
+    claimName: counter-redis

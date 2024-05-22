@@ -11,7 +11,12 @@ setup(
     description="The script podman-compose-to-kube generates kubernetes manifests to deploy the specified service stack in kubernetes.",
     long_description=readme,
     long_description_content_type="text/markdown",
-    data_files = [('share/man/man1', ['man/podman-compose-to-kube_en.1','man/podman-compose-to-kube_ru.1'])],
+    data_files=[
+        (
+            "share/man/man1",
+            ["man/podman-compose-to-kube_en.1", "man/podman-compose-to-kube_ru.1"],
+        )
+    ],
     classifiers=[
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
@@ -32,15 +37,11 @@ setup(
     author_email="kaf@basealt.ru, thatman@altlinux.org",
     url="https://github.com/alt-cloud/podman-compose-to-kube",
     py_modules=["podman_compose_to_kube"],
-    entry_points={"console_scripts": ["podman-compose-to-kube = podman_compose_to_kube:main"]},
+    entry_points={
+        "console_scripts": ["podman-compose-to-kube = podman_compose_to_kube:main"]
+    },
     include_package_data=True,
     license="GPL-2.0-only",
-    install_requires=[
-        "pyyaml",
-        "pytest"
-    ],
-    extras_require={
-      "devel": [
-      ]
-    }
+    install_requires=["pyyaml", "pytest"],
+    extras_require={"devel": []},
 )

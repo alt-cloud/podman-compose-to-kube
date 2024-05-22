@@ -1,0 +1,19 @@
+# Created with podman-compose-to-kube 1.0.0-alt1
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  labels:
+    type: local
+  name: default-counter-redis
+spec:
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 1Gi
+  claimRef:
+    name: counter-redis
+    namespace: default
+  hostPath:
+    path: /mnt/PersistentVolumes/default/counter-redis
+  storageClassName: manual

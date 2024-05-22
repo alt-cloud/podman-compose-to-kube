@@ -1,0 +1,16 @@
+# Created with podman-compose-to-kube 1.0.0-alt1
+---
+apiVersion: v2
+appVersion: 1.16.0
+dependencies:
+- enabled: true
+  name: redis
+  repository: file://./redis
+  version: 0.1.0
+- enabled: true
+  name: web
+  repository: file://./web
+  version: 0.1.0
+description: A Helm chart for counter
+name: counter
+version: 0.1.0

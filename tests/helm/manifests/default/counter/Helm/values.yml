@@ -1,0 +1,4 @@
+# Created with podman-compose-to-kube 1.0.0-alt1
+---
+redis: {}
+web: {}
